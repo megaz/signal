@@ -1,0 +1,23 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --thriving:  #22c55e;
+    --aging:     #eab308;
+    --fatiguing: #f97316;
+    --declining: #ef4444;
+  }
+}
+
+@layer utilities {
+  .pulse-glow {
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 6px 2px var(--fatiguing); }
+  50%       { box-shadow: 0 0 18px 6px var(--fatiguing); }
+}
