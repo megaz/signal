@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from app.core.database import init_db
-from app.api.v1.routers import ads, brands, canvas, review, auth, trends
+from app.api.v1.routers import ads, auth, brands, canvas, radar, review, trends
 from app.websockets.collaboration import router as ws_router
 
 
@@ -34,6 +34,7 @@ app.include_router(ads.router, prefix="/api/v1/ads", tags=["ads"])
 app.include_router(canvas.router, prefix="/api/v1/canvas", tags=["canvas"])
 app.include_router(review.router, prefix="/api/v1/review", tags=["review"])
 app.include_router(trends.router, prefix="/api/v1/trends", tags=["trends"])
+app.include_router(radar.router, prefix="/api/v1/radar", tags=["radar"])
 app.include_router(ws_router, prefix="/ws", tags=["websockets"])
 
 
