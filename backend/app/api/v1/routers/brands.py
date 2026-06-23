@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -6,6 +6,7 @@ from app.core.database import get_db
 from app.models.brand import Brand
 from app.models.ad import Ad, AdHealth
 from app.schemas.ad import AdNode
+from app.services.analysis.similarity_tree import cluster_brand_families
 
 router = APIRouter()
 
@@ -44,3 +45,10 @@ async def get_brand_stats(brand_id: str, db: AsyncSession = Depends(get_db)):
         "health_breakdown": counts,
         "fatiguing_count": counts[AdHealth.fatiguing] + counts[AdHealth.declining],
     }
+
+
+@router.post("/{brand_id}/cluster")
+async def trigger_clustering(brand_id: str, background_tasks: BackgroundTasks):
+    """Re-cluster all ads for a brand into creative families."""
+    background_tasks.add_task(cluster_brand_families, brand_id)
+    return {"queued": True}

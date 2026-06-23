@@ -11,6 +11,31 @@ interface Props {
   brandId: string;
 }
 
+type SimNode = d3.SimulationNodeDatum & AdNode;
+
+interface FamilyLink {
+  source: SimNode;
+  target: SimNode;
+}
+
+function buildFamilyLinks(nodes: AdNode[]): FamilyLink[] {
+  const links: FamilyLink[] = [];
+  const withFamily = nodes.filter((n) => n.creative_family_id);
+  const families = d3.group(withFamily, (d) => d.creative_family_id!);
+
+  families.forEach((members) => {
+    if (members.length < 2) return;
+    for (let i = 0; i < members.length - 1; i++) {
+      links.push({
+        source: members[i] as SimNode,
+        target: members[i + 1] as SimNode,
+      });
+    }
+  });
+
+  return links;
+}
+
 export function BrandWeb({ brandId }: Props) {
   const { nodes, competitorNodes, loading } = useAdWeb(brandId);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -18,18 +43,29 @@ export function BrandWeb({ brandId }: Props) {
 
   useEffect(() => {
     if (!svgRef.current || nodes.length === 0) return;
-    const allNodes = [...nodes, ...competitorNodes];
+    const allNodes = [...nodes, ...competitorNodes] as SimNode[];
     const width = svgRef.current.clientWidth;
     const height = svgRef.current.clientHeight;
 
     const svg = d3.select(svgRef.current);
     svg.selectAll("*").remove();
 
+    const familyLinks = buildFamilyLinks(allNodes);
+
     const sim = d3
-      .forceSimulation(allNodes as d3.SimulationNodeDatum[])
+      .forceSimulation(allNodes)
       .force("charge", d3.forceManyBody().strength(-120))
       .force("center", d3.forceCenter(width / 2, height / 2))
       .force("collision", d3.forceCollide().radius((d) => healthToRadius((d as AdNode).health_score) + 4));
+
+    const lines = svg
+      .selectAll("line")
+      .data(familyLinks)
+      .enter()
+      .append("line")
+      .attr("stroke", "#374151")
+      .attr("stroke-width", 1)
+      .attr("opacity", 0.4);
 
     const circles = svg
       .selectAll("circle")
@@ -44,9 +80,15 @@ export function BrandWeb({ brandId }: Props) {
       .on("click", (_, d) => router.push(`/canvas/${d.id}`));
 
     sim.on("tick", () => {
+      lines
+        .attr("x1", (d) => d.source.x ?? 0)
+        .attr("y1", (d) => d.source.y ?? 0)
+        .attr("x2", (d) => d.target.x ?? 0)
+        .attr("y2", (d) => d.target.y ?? 0);
+
       circles
-        .attr("cx", (d) => (d as d3.SimulationNodeDatum & AdNode).x ?? 0)
-        .attr("cy", (d) => (d as d3.SimulationNodeDatum & AdNode).y ?? 0);
+        .attr("cx", (d) => d.x ?? 0)
+        .attr("cy", (d) => d.y ?? 0);
     });
 
     return () => { sim.stop(); };

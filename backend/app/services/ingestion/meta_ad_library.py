@@ -67,5 +67,10 @@ async def sync_brand_ads(brand_id: str):
                 db.add(ad)
             ad.run_days = compute_run_days(raw)
             ad.title = raw.get("ad_creative_link_caption") or raw.get("ad_creative_body", "")[:80]
+            ad.thumbnail_url = raw.get("ad_snapshot_url")
 
         await db.commit()
+
+    from app.services.analysis.similarity_tree import cluster_brand_families
+
+    await cluster_brand_families(brand_id)
