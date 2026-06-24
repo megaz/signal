@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, BackgroundTasks, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
 from app.models.ad import Ad
@@ -18,7 +19,9 @@ router = APIRouter()
 
 @router.get("/{ad_id}", response_model=AdDetail)
 async def get_ad(ad_id: str, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Ad).where(Ad.id == ad_id))
+    result = await db.execute(
+        select(Ad).options(selectinload(Ad.beats)).where(Ad.id == ad_id)
+    )
     ad = result.scalar_one_or_none()
     if not ad:
         from fastapi import HTTPException

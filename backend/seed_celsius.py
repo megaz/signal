@@ -17,8 +17,11 @@ from sqlalchemy import select
 from app.core.database import AsyncSessionLocal, init_db
 from app.models.ad import Ad, AdHealth, AdPlatform
 from app.models.brand import Brand
+# Import related models so SQLAlchemy can resolve relationship() targets.
+from app.models.beat import Beat  # noqa: F401
+from app.models.tiktok_post import TikTokPost  # noqa: F401
 
-BRAND_ID = "1ad089e1-9e52-435a-883d-004966a456e1"
+BRAND_ID = "celsius"  # matches the brand id in the running sqlite DB
 OUTPUT_DIR = Path(__file__).resolve().parent.parent / "scripts" / "output"
 FILES = [
     "celsius_us_normalized.json",

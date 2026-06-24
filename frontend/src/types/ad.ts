@@ -1,3 +1,5 @@
+import type { Beat } from "@/types/beat";
+
 export type AdHealth = "thriving" | "aging" | "fatiguing" | "declining";
 export type AdPlatform = "meta" | "tiktok";
 

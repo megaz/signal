@@ -88,45 +88,64 @@ const PERIODS: { key: Period; label: string }[] = [
 ];
 
 // ─── Ad gallery ───────────────────────────────────────────────────────────────
-// IAB standard ad formats — true creative dimensions, used to preserve aspect ratio
-const AD_FORMATS: Record<string, { w: number; h: number; label: string }> = {
-  "medium-rectangle": { w: 300, h: 250, label: "300 × 250" },
-  "half-page":        { w: 300, h: 600, label: "300 × 600" },
-  "large-rectangle":  { w: 300, h: 350, label: "300 × 350" },
-  "square":           { w: 250, h: 250, label: "250 × 250" },
-  "banner":           { w: 320, h: 100, label: "320 × 100" },
-  "wide-banner":      { w: 320, h: 50,  label: "320 × 50"  },
-  "skyscraper":       { w: 160, h: 600, label: "160 × 600" },
+// TikTok-format creatives (9:16). Each card carries health status for filtering.
+const TIKTOK_RATIO = 16 / 9; // height / width
+
+type GalleryView = "grid" | "stack";
+type StatusFilter = "all" | Status;
+
+const GALLERY_FILTERS: { key: StatusFilter; label: string }[] = [
+  { key: "all",      label: "All"      },
+  { key: "thriving", label: "Thriving" },
+  { key: "aging",    label: "Aging"    },
+  { key: "fatigued", label: "Fatigued" },
+];
+
+const GALLERY_VIEWS: { key: GalleryView; label: string }[] = [
+  { key: "grid",  label: "Grid"  },
+  { key: "stack", label: "Stack" },
+];
+
+type GalleryItem = {
+  id: number;
+  status: Status;
+  trend: Trend;
+  name: string;
+  handle: string;
+  score: number;
+  rev: string;
+  roas: string;
+  impr: string;
+  dropoff: string;
+  ctr: string;
 };
 
-function adHeight(colWidth: number, formatKey: string): number {
-  const fmt = AD_FORMATS[formatKey];
-  return Math.round(colWidth * (fmt.h / fmt.w));
-}
-
-const AD_SEQUENCE: string[] = [
-  "wide-banner", "medium-rectangle", "half-page",
-  "banner",      "medium-rectangle", "square",
-  "wide-banner", "large-rectangle",  "half-page",
-  "banner",      "medium-rectangle", "wide-banner",
-  "large-rectangle", "half-page",    "banner",
-  "square",      "medium-rectangle", "wide-banner",
-  "half-page",   "medium-rectangle",
-  "medium-rectangle", "half-page",    "banner",
-  "square",           "wide-banner",  "large-rectangle",
-  "half-page",        "banner",       "medium-rectangle",
-  "wide-banner",      "square",       "half-page",
-  "medium-rectangle", "banner",       "large-rectangle",
-  "wide-banner",      "half-page",    "medium-rectangle",
-  "banner",           "square",
-  "square",           "half-page",        "banner",
-  "medium-rectangle", "wide-banner",      "large-rectangle",
-  "half-page",        "square",           "medium-rectangle",
-  "banner",           "half-page",        "wide-banner",
-  "large-rectangle",  "medium-rectangle", "square",
-  "half-page",        "banner",           "medium-rectangle",
-  "wide-banner",      "large-rectangle",
+const GALLERY_NAMES = [
+  "Summer Splash",  "Back to School", "Holiday Push",  "Brand Awareness",
+  "Hydration Hits", "Energy Boost",   "Morning Reset", "Game Day",
+  "Festival Series", "Gym Streak",    "Office Fuel",   "Trail Mix",
 ];
+
+const GALLERY_ITEMS: GalleryItem[] = Array.from({ length: 24 }, (_, i) => {
+  const status = (["thriving", "aging", "thriving", "fatigued", "aging", "thriving"] as Status[])[i % 6];
+  const trend: Trend = status === "fatigued" ? "down" : "up";
+  const r = (i * 37) % 100;
+  const score =
+    status === "thriving" ? 78 + (r % 20) : status === "aging" ? 55 + (r % 20) : 30 + (r % 22);
+  return {
+    id: i + 1,
+    status,
+    trend,
+    name: GALLERY_NAMES[i % GALLERY_NAMES.length],
+    handle: `#cmp-${String(i + 1).padStart(2, "0")}`,
+    score,
+    rev: `$${8 + (r % 90)}k`,
+    roas: `${(2 + (r % 35) / 10).toFixed(1)}x`,
+    impr: `${(0.3 + (r % 50) / 10).toFixed(1)}M`,
+    dropoff: `${12 + (r % 40)}%`,
+    ctr: `${(1.5 + (r % 30) / 10).toFixed(1)}%`,
+  };
+});
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -485,52 +504,195 @@ function TopPerformers() {
 
 // ─── Ad gallery ─────────────────────────────────────────────────────────────────
 
-function AdPanel({ color, formatKey, colWidth }: { color: string; formatKey: string; colWidth: number }) {
-  const fmt = AD_FORMATS[formatKey];
-  const h = adHeight(colWidth, formatKey);
+function SegToggle<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: { key: T; label: string }[];
+  value: T;
+  onChange: (v: T) => void;
+}) {
   return (
-    <div
-      className="flex-none flex items-end justify-end"
-      style={{ width: colWidth, height: h, backgroundColor: color, borderRadius: 18, padding: "10px 12px", flexShrink: 0 }}
-    >
-      <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 300, color: "rgba(255,255,255,0.35)", letterSpacing: "0.05em" }}>
-        {fmt.label}
+    <div className="flex items-center flex-none" style={{ border: "1.5px solid #000", borderRadius: 20, padding: 2, gap: 2 }}>
+      {options.map((o) => {
+        const active = o.key === value;
+        return (
+          <button
+            key={o.key}
+            onClick={() => onChange(o.key)}
+            style={{
+              borderRadius: 16,
+              padding: "5px 14px",
+              background: active ? "#000" : "transparent",
+              color: active ? "#fff" : "#000",
+              fontFamily: FONT,
+              fontWeight: 500,
+              fontSize: 13,
+              cursor: "pointer",
+              transition: "background 0.15s",
+            }}
+          >
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function TikTokCard({
+  item,
+  width,
+  shade,
+}: {
+  item: GalleryItem;
+  width: number;
+  shade: string;
+}) {
+  const color = STATUS_COLOR[item.status];
+  const height = Math.round(width * TIKTOK_RATIO);
+  return (
+    <div className="relative flex-none" style={{ width, height, backgroundColor: shade, borderRadius: 18, flexShrink: 0 }}>
+      <div style={{ position: "absolute", top: 12, left: 12 }}>
+        <svg style={{ width: 18, height: 18, display: "block" }} viewBox="0 0 21 21" fill="none">
+          <circle cx="10.5" cy="10.5" r="9.5" stroke="white" strokeWidth="2" />
+          <path d={svgPaths.p3c4bedc0} fill="white" />
+        </svg>
+      </div>
+      <div style={{ position: "absolute", top: 0, right: 0 }}>
+        <TrendNotch color={color} trend={item.trend} w={45} h={32} />
+      </div>
+      <div className="absolute flex items-center gap-1.5" style={{ bottom: 12, left: 12 }}>
+        <span style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color }} />
+        <span style={{ fontFamily: FONT, fontWeight: 400, fontSize: 12, color: "rgba(255,255,255,0.85)" }}>
+          {STATUS_LABEL[item.status]}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function StackMetric({ label, value, accent }: { label: string; value: string; accent?: string }) {
+  return (
+    <div className="flex flex-col">
+      <span style={{ fontFamily: FONT, fontWeight: 600, fontSize: 18, color: accent ?? "#000", lineHeight: 1.1 }}>
+        {value}
       </span>
+      <span style={{ fontFamily: FONT, fontWeight: 400, fontSize: 11, color: "rgba(0,0,0,0.4)", whiteSpace: "nowrap" }}>
+        {label}
+      </span>
+    </div>
+  );
+}
+
+// Stack view row: a rectangular pill split into a creative column (video + info)
+// and a linked analytics column (revenue, ROAS, impressions, drop-off, signal).
+function StackRow({ item, shade }: { item: GalleryItem; shade: string }) {
+  const color = STATUS_COLOR[item.status];
+  const signal = item.status === "thriving" ? "Strong" : item.status === "aging" ? "Watch" : "At Risk";
+  const vidW = 104;
+  const vidH = Math.round(vidW * TIKTOK_RATIO);
+  return (
+    <div className="flex items-stretch w-full" style={{ border: "2px solid #ececec", borderRadius: 24, padding: 14, gap: 18 }}>
+      {/* Column 1 — video + campaign info */}
+      <div className="flex items-center flex-none" style={{ gap: 14 }}>
+        <div className="relative flex-none" style={{ width: vidW, height: vidH, backgroundColor: shade, borderRadius: 16 }}>
+          <div style={{ position: "absolute", top: 10, left: 10 }}>
+            <svg style={{ width: 16, height: 16, display: "block" }} viewBox="0 0 21 21" fill="none">
+              <circle cx="10.5" cy="10.5" r="9.5" stroke="white" strokeWidth="2" />
+              <path d={svgPaths.p3c4bedc0} fill="white" />
+            </svg>
+          </div>
+          <div style={{ position: "absolute", top: 0, right: 0 }}>
+            <TrendNotch color={color} trend={item.trend} w={38} h={27} />
+          </div>
+        </div>
+        <div className="flex flex-col" style={{ width: 150 }}>
+          <span style={{ fontFamily: FONT, fontWeight: 600, fontSize: 17, color: "#000", lineHeight: 1.2 }}>
+            {item.name}
+          </span>
+          <span style={{ fontFamily: FONT, fontWeight: 400, fontSize: 12, color: "rgba(0,0,0,0.35)" }}>
+            {item.handle}
+          </span>
+          <div className="flex items-center gap-1.5" style={{ marginTop: 8 }}>
+            <span style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color }} />
+            <span style={{ fontFamily: FONT, fontWeight: 400, fontSize: 13, color }}>{STATUS_LABEL[item.status]}</span>
+          </div>
+          <div className="flex items-baseline gap-1" style={{ marginTop: 10 }}>
+            <span style={{ fontFamily: FONT, fontWeight: 600, fontSize: 26, color, lineHeight: 1 }}>{item.score}</span>
+            <span style={{ fontFamily: FONT, fontWeight: 400, fontSize: 11, color: "rgba(0,0,0,0.4)" }}>perf.</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Divider linking the two columns */}
+      <div className="flex-none self-stretch" style={{ width: 1, background: "#efefef" }} />
+
+      {/* Column 2 — analytics linked to the creative */}
+      <div className="flex-1 min-w-0 flex flex-col justify-center" style={{ gap: 14 }}>
+        <div className="flex items-center justify-between">
+          <span style={{ fontFamily: FONT, fontWeight: 500, fontSize: 12, color: "rgba(0,0,0,0.45)" }}>
+            Performance signals
+          </span>
+          <div
+            className="flex items-center gap-1.5 flex-none"
+            style={{ border: `1.5px solid ${color}`, borderRadius: 20, padding: "3px 10px" }}
+          >
+            <span style={{ color, fontSize: 11 }}>{item.trend === "up" ? "▲" : "▼"}</span>
+            <span style={{ fontFamily: FONT, fontWeight: 500, fontSize: 12, color }}>{signal}</span>
+          </div>
+        </div>
+        <div className="flex flex-wrap" style={{ gap: "14px 28px" }}>
+          <StackMetric label="Revenue" value={item.rev} />
+          <StackMetric label="ROAS" value={item.roas} accent={STATUS_COLOR.thriving} />
+          <StackMetric label="Impressions" value={item.impr} />
+          <StackMetric label="Drop-off" value={item.dropoff} accent={STATUS_COLOR.fatigued} />
+          <StackMetric label="CTR" value={item.ctr} />
+          <StackMetric label="Perf. score" value={String(item.score)} accent={color} />
+        </div>
+      </div>
     </div>
   );
 }
 
 function Gallery() {
   const [ref, width] = useElementWidth();
+  const [view, setView] = useState<GalleryView>("grid");
+  const [filter, setFilter] = useState<StatusFilter>("all");
 
   const inner = Math.max(0, width - PAD * 2);
   const numCols = inner ? Math.max(1, Math.round(inner / TARGET_COL)) : 3;
   const colWidth = inner ? (inner - (numCols - 1) * COL_GAP) / numCols : TARGET_COL;
-
-  const columns: { formatKey: string }[][] = Array.from({ length: numCols }, () => []);
-  const heights = new Array(numCols).fill(0);
-  for (const formatKey of AD_SEQUENCE) {
-    let shortest = 0;
-    for (let k = 1; k < numCols; k++) if (heights[k] < heights[shortest]) shortest = k;
-    columns[shortest].push({ formatKey });
-    heights[shortest] += adHeight(colWidth, formatKey) + ROW_GAP;
-  }
+  const items = GALLERY_ITEMS.filter((it) => filter === "all" || it.status === filter);
 
   return (
-    <div
-      ref={ref}
-      className="flex-1 min-h-0 overflow-y-auto"
-      style={{ paddingLeft: PAD, paddingRight: PAD, paddingBottom: PAD, scrollbarWidth: "none" }}
-    >
-      <div className="flex" style={{ gap: COL_GAP, alignItems: "flex-start" }}>
-        {columns.map((col, ci) => (
-          <div key={ci} className="flex flex-col flex-none" style={{ width: colWidth, gap: ROW_GAP }}>
-            {col.map((ad, i) => (
-              <AdPanel key={i} formatKey={ad.formatKey} colWidth={colWidth} color={shadeFor(ci, numCols, i)} />
-            ))}
-          </div>
-        ))}
+    <div ref={ref} className="flex-none" style={{ paddingLeft: PAD, paddingRight: PAD, paddingBottom: PAD }}>
+      <div className="flex items-center" style={{ marginBottom: 16, gap: 12 }}>
+        <span style={{ fontFamily: FONT, fontWeight: 400, fontSize: 22, color: "#000" }}>Gallery</span>
+        <div className="flex-1" />
+        <SegToggle options={GALLERY_FILTERS} value={filter} onChange={setFilter} />
+        <SegToggle options={GALLERY_VIEWS} value={view} onChange={setView} />
       </div>
+
+      {view === "grid" ? (
+        <div className="flex flex-wrap" style={{ gap: COL_GAP }}>
+          {items.map((it, i) => (
+            <TikTokCard
+              key={it.id}
+              item={it}
+              width={colWidth}
+              shade={shadeFor(i % numCols, numCols, Math.floor(i / numCols))}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="flex flex-col" style={{ gap: 14 }}>
+          {items.map((it, i) => (
+            <StackRow key={it.id} item={it} shade={shadeFor(0, 1, i)} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -539,7 +701,7 @@ function Gallery() {
 
 export default function App() {
   return (
-    <div className="w-full h-screen overflow-hidden bg-white flex flex-col">
+    <div className="w-full min-h-screen bg-white flex flex-col">
       {/* ── 1. Nav header ─────────────────────────────────────────────── */}
       <div className="flex items-center flex-none" style={{ paddingLeft: PAD, paddingRight: PAD, paddingTop: 28, gap: 14 }}>
         <NavLogo />
@@ -555,7 +717,7 @@ export default function App() {
 
       {/* ── 2. Stats bar ──────────────────────────────────────────────── */}
       <div className="flex items-center flex-none" style={{ paddingLeft: PAD, paddingRight: PAD, marginTop: 16, gap: 20 }}>
-        <span style={{ fontFamily: FONT, fontWeight: 500, fontSize: 21, color: "#000", whiteSpace: "nowrap" }}>
+        <span style={{ fontFamily: FONT, fontWeight: 400, fontSize: 21, color: "#000", whiteSpace: "nowrap" }}>
           Running Campaigns
         </span>
         <div className="flex-1" />
