@@ -250,9 +250,9 @@ function StatBadge({ value }: { value: string }) {
   return (
     <div
       className="flex items-center justify-center flex-none"
-      style={{ height: 38, paddingLeft: 14, paddingRight: 14, borderRadius: 40, border: "2px solid #000" }}
+      style={{ height: 32, paddingLeft: 13, paddingRight: 13, borderRadius: 40, border: "2px solid #000" }}
     >
-      <span style={{ fontFamily: FONT, fontWeight: 400, fontSize: 18, color: "#000" }}>{value}</span>
+      <span style={{ fontFamily: FONT, fontWeight: 500, fontSize: 16, color: "#000" }}>{value}</span>
     </div>
   );
 }
@@ -260,7 +260,7 @@ function StatBadge({ value }: { value: string }) {
 function StatGroup({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center gap-2 flex-none">
-      <span style={{ fontFamily: FONT, fontWeight: 400, fontSize: 22, color: "#000", whiteSpace: "nowrap" }}>
+      <span style={{ fontFamily: FONT, fontWeight: 400, fontSize: 16, color: "rgba(0,0,0,0.55)", whiteSpace: "nowrap" }}>
         {label}
       </span>
       <StatBadge value={value} />
@@ -554,8 +554,8 @@ export default function App() {
       </div>
 
       {/* ── 2. Stats bar ──────────────────────────────────────────────── */}
-      <div className="flex items-center flex-none" style={{ paddingLeft: PAD, paddingRight: PAD, marginTop: 18, gap: 22 }}>
-        <span style={{ fontFamily: FONT, fontWeight: 300, fontSize: 24, color: "#000", whiteSpace: "nowrap" }}>
+      <div className="flex items-center flex-none" style={{ paddingLeft: PAD, paddingRight: PAD, marginTop: 16, gap: 20 }}>
+        <span style={{ fontFamily: FONT, fontWeight: 500, fontSize: 21, color: "#000", whiteSpace: "nowrap" }}>
           Running Campaigns
         </span>
         <div className="flex-1" />
