@@ -28,6 +28,7 @@ class Settings(BaseSettings):
 
     # Luma AI
     luma_api_key: str = ""
+    luma_api_base: str = "https://agents.lumalabs.ai/v1"
 
     # Claude (Anthropic) — beat teardown + fix proposals
     anthropic_api_key: str = ""
