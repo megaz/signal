@@ -2,8 +2,6 @@
 Given a weak beat, proposes a targeted creative fix using Claude.
 The fix is tied to rising trend signals so it's culturally grounded, not generic.
 """
-import json
-import re
 import asyncio
 import anthropic
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +10,7 @@ from sqlalchemy import select
 from app.config import get_settings
 from app.models.beat import Beat
 from app.services.ingestion.google_trends import fetch_trends
+from app.services.ai.utils import parse_json
 
 settings = get_settings()
 client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
@@ -56,10 +55,7 @@ async def propose_fix(beat_id: str, db: AsyncSession) -> dict:
         messages=[{"role": "user", "content": prompt}],
     )
 
-    text = message.content[0].text.strip()
-    text = re.sub(r"^```(?:json)?\s*", "", text)
-    text = re.sub(r"\s*```$", "", text)
-    fix = json.loads(text.strip())
+    fix = parse_json(message.content[0].text)
 
     # Persist to the beat row
     beat.proposed_fix = fix

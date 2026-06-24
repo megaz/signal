@@ -9,8 +9,6 @@ One Claude call covers frames (via thumbnail), on-screen text, audio style infer
 """
 import asyncio
 import uuid
-import json
-import re
 import anthropic
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -18,6 +16,7 @@ from sqlalchemy import select
 from app.config import get_settings
 from app.models.ad import Ad
 from app.models.beat import Beat, BeatType, BeatHealth
+from app.services.ai.utils import parse_json
 
 settings = get_settings()
 client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
@@ -50,14 +49,6 @@ Format:
 }"""
 
 
-def _parse_json(text: str) -> dict:
-    """Parse Claude's response, stripping any markdown code fences."""
-    text = text.strip()
-    # Strip ```json ... ``` or ``` ... ``` wrappers
-    text = re.sub(r"^```(?:json)?\s*", "", text)
-    text = re.sub(r"\s*```$", "", text)
-    return json.loads(text.strip())
-
 
 def _build_text_block(ad: Ad) -> dict:
     return {
@@ -84,7 +75,7 @@ async def _call_claude(content: list[dict]) -> dict:
         ),
         timeout=45,
     )
-    return _parse_json(message.content[0].text)
+    return parse_json(message.content[0].text)
 
 
 async def run_teardown(ad_id: str, db: AsyncSession) -> list[Beat]:

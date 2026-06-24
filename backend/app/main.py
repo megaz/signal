@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 
 from app.core.database import init_db
 from app.config import get_settings
-from app.api.v1.routers import ads, auth, brands, canvas, monitoring, radar, review, trends
+from app.api.v1.routers import ads, auth, brands, canvas, monitoring, prism, review, trends
 from app.websockets.collaboration import router as ws_router
 
 
@@ -39,7 +39,7 @@ app.include_router(canvas.router, prefix="/api/v1/canvas", tags=["canvas"])
 app.include_router(review.router, prefix="/api/v1/review", tags=["review"])
 app.include_router(monitoring.router, prefix="/api/v1/monitoring", tags=["monitoring"])
 app.include_router(trends.router, prefix="/api/v1/trends", tags=["trends"])
-app.include_router(radar.router, prefix="/api/v1/radar", tags=["radar"])
+app.include_router(prism.router, prefix="/api/v1/prism", tags=["prism"])
 app.include_router(ws_router, prefix="/ws", tags=["websockets"])
 
 
