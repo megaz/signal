@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     # Database — defaults to SQLite for local dev; swap to postgresql+asyncpg:// in production
     database_url: str = "sqlite+aiosqlite:///./pulse.db"
     redis_url: str = "redis://localhost:6379"
+    cors_origins: str = "http://localhost:3000"
 
     # Meta Ad Library
     meta_access_token: str = ""
@@ -35,6 +36,9 @@ class Settings(BaseSettings):
     # Slack handoff
     slack_bot_token: str = ""
     slack_channel_id: str = ""
+
+    # Apify (TikTok scraper script support)
+    apify_token: str = ""
 
     class Config:
         env_file = ".env"

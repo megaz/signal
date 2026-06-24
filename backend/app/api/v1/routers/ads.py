@@ -8,6 +8,7 @@ from app.schemas.ad import AdDetail
 from app.services.ingestion.meta_ad_library import sync_brand_ads
 from app.services.ingestion.tiktok_apify import sync_tiktok_apify_ads
 from app.services.ingestion.tiktok_posts import sync_tiktok_posts
+from app.services.ingestion.orchestrator import collect_brand_data
 from app.services.analysis.beat_detector import detect_beats
 
 router = APIRouter()
@@ -95,6 +96,29 @@ async def trigger_tiktok_posts_sync(
         download_covers=download_covers,
     )
     return {"queued": True}
+
+
+@router.post("/collect/{brand_id}")
+async def trigger_collection(
+    brand_id: str,
+    background_tasks: BackgroundTasks,
+    source: str = "meta",
+    tiktok_industry_id: str = "7",
+):
+    """Queue on-demand ingestion into the DB from Meta, TikTok, or both."""
+    allowed_sources = {"meta", "tiktok", "both"}
+    if source not in allowed_sources:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=400, detail="source must be one of: meta, tiktok, both")
+
+    background_tasks.add_task(collect_brand_data, brand_id, source, tiktok_industry_id)
+    return {
+        "queued": True,
+        "brand_id": brand_id,
+        "source": source,
+        "tiktok_industry_id": tiktok_industry_id,
+    }
 
 
 @router.post("/{ad_id}/analyze")

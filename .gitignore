@@ -1,5 +1,6 @@
 # Script output
-scripts/output/
+scripts/output/*
+!scripts/output/.gitkeep
 scripts/.venv/
 
 # Python

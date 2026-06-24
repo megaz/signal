@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from app.core.database import init_db
+from app.config import get_settings
 from app.api.v1.routers import ads, auth, brands, canvas, radar, review, trends
 from app.websockets.collaboration import router as ws_router
 
@@ -20,9 +21,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+settings = get_settings()
+allowed_origins = [origin.strip() for origin in settings.cors_origins.split(",") if origin.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
