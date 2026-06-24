@@ -194,6 +194,78 @@ def suggest_profile(query: str | None, brand_name: str | None = None) -> str | N
     return None
 
 
+def author_handle(item: dict[str, Any]) -> str | None:
+    author_meta = item.get("authorMeta")
+    if isinstance(author_meta, dict):
+        name = author_meta.get("name") or author_meta.get("uniqueId")
+        if name:
+            return str(name).lstrip("@").lower()
+    return None
+
+
+def mentions_handle(item: dict[str, Any], handle: str) -> bool:
+    """True when post caption @-mentions the handle or is published by that account."""
+    normalized = handle.lstrip("@").lower()
+    text = str(item.get("text") or item.get("desc") or "").lower()
+    if f"@{normalized}" in text:
+        return True
+    return author_handle(item) == normalized
+
+
+def run_tagged_posts_scraper(
+    token: str,
+    handle: str,
+    *,
+    results_per_page: int = 100,
+    comments_per_post: int = DEFAULT_COMMENTS_PER_POST,
+    max_posts: int = 100,
+    include_profile_posts: bool = True,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """
+    Discover TikTok posts that tag @handle (search) plus optional profile videos.
+    Returns (discovery_items, detail_items_with_comments).
+    """
+    client = ApifyClient(token)
+    normalized_handle = handle.lstrip("@")
+    discovery_items: list[dict[str, Any]] = []
+    urls: list[str] = []
+
+    def collect(items: list[dict[str, Any]]) -> None:
+        for item in items:
+            if not mentions_handle(item, normalized_handle):
+                continue
+            url = extract_post_url(item)
+            if url and url not in urls:
+                urls.append(url)
+                discovery_items.append(item)
+
+    for search_q in (f"@{normalized_handle}", normalized_handle):
+        discovery_input = build_discovery_input(
+            search_queries=[search_q],
+            results_per_page=results_per_page,
+        )
+        collect(run_actor(client, discovery_input))
+
+    if include_profile_posts:
+        profile_input = build_discovery_input(
+            profiles=[normalized_handle],
+            results_per_page=results_per_page,
+            download_videos=True,
+            download_covers=True,
+        )
+        collect(run_actor(client, profile_input))
+
+    urls = urls[:max_posts]
+    print(f"Tagged @{normalized_handle}: discovered {len(urls)} post URLs for detail scrape")
+    if not urls:
+        return discovery_items, []
+
+    detail_input = build_detail_input(urls, comments_per_post=comments_per_post)
+    detail_items = enrich_items_with_comments(client, run_actor(client, detail_input))
+    detail_items = [item for item in detail_items if mentions_handle(item, normalized_handle)]
+    return discovery_items, detail_items
+
+
 def run_tiktok_posts_scraper(
     token: str,
     *,

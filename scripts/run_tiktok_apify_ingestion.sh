@@ -1,14 +1,12 @@
 #!/usr/bin/env bash
-# Run TikTok Apify ingestion via the Docker Compose API.
+# Run TikTok Apify ingestion (tagged @celsiusofficial posts) via Docker Compose API.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-QUERY="${QUERY:-celsius drinks}"
-COUNTRY="${COUNTRY:-GB}"
-MODE="${MODE:-ad_library}"
-FILTER_QUERY="${FILTER_QUERY:-true}"
+HANDLE="${HANDLE:-celsiusofficial}"
+MAX_POSTS="${MAX_POSTS:-100}"
 
 echo "Starting Docker Compose stack..."
 docker compose up -d db redis api
@@ -35,6 +33,7 @@ import app.models.beat  # noqa: F401
 import app.models.ad  # noqa: F401
 import app.models.brand  # noqa: F401
 import app.models.refresh  # noqa: F401
+import app.models.tiktok_post  # noqa: F401
 
 from app.core.database import init_db, AsyncSessionLocal
 from app.models.brand import Brand
@@ -47,7 +46,7 @@ async def main() -> None:
             print(brand.id, end="")
             return
         brand_id = str(uuid.uuid4())
-        db.add(Brand(id=brand_id, name="Celsius"))
+        db.add(Brand(id=brand_id, name="Celsius", tiktok_account_id="celsiusofficial"))
         await db.commit()
         print(brand_id, end="")
 
@@ -56,11 +55,11 @@ PY
 )"
 
 echo "Brand ID: $BRAND_ID"
-echo "Queueing ingestion for query: $QUERY"
+echo "Queueing ingestion for posts tagged @$HANDLE"
 
 curl -sf -X POST \
-  "http://localhost:8000/api/v1/ads/sync-tiktok-apify/${BRAND_ID}?query=$(python3 -c "import urllib.parse; print(urllib.parse.quote('''$QUERY'''))")&country=${COUNTRY}&mode=${MODE}&filter_query=${FILTER_QUERY}"
+  "http://localhost:8000/api/v1/ads/sync-tiktok-apify/${BRAND_ID}?handle=${HANDLE}&max_posts=${MAX_POSTS}"
 
 echo ""
 echo "Ingestion queued. Apify scrape runs in the API container background (~3-5 min)."
-echo "Check results: curl http://localhost:8000/api/v1/brands/${BRAND_ID}/web"
+echo "Check results: curl http://localhost:8000/api/v1/brands/${BRAND_ID}/tiktok-posts"

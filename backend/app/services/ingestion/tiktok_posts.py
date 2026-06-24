@@ -145,6 +145,48 @@ async def fetch_posts_with_comments(
     )
 
 
+async def upsert_tiktok_post_items(db, brand_id: str, items: list[dict[str, Any]]) -> int:
+    """Upsert scraped TikTok post dicts into tiktok_posts. Returns rows touched."""
+    from sqlalchemy import select
+
+    from app.models.tiktok_post import TikTokPost
+
+    count = 0
+    for item in items:
+        video_id = _video_id_from_item(item)
+        if not video_id:
+            continue
+
+        existing = await db.execute(
+            select(TikTokPost).where(
+                TikTokPost.brand_id == brand_id,
+                TikTokPost.video_id == video_id,
+            )
+        )
+        post = existing.scalar_one_or_none()
+        if not post:
+            post = TikTokPost(
+                id=str(uuid.uuid4()),
+                brand_id=brand_id,
+                video_id=video_id,
+            )
+            db.add(post)
+
+        post.web_video_url = _media_url(item) or item.get("webVideoUrl") or item.get("web_video_url")
+        post.caption = item.get("text") or item.get("desc")
+        post.author_username = _author_username(item)
+        post.play_count = item.get("playCount")
+        post.digg_count = item.get("diggCount")
+        post.comment_count = item.get("commentCount")
+        post.share_count = item.get("shareCount")
+        post.raw_post = json.dumps(item, ensure_ascii=False)
+        comments = _extract_comments(item)
+        post.comments_json = json.dumps(comments, ensure_ascii=False) if comments else None
+        count += 1
+
+    return count
+
+
 async def sync_tiktok_posts(
     brand_id: str,
     *,
@@ -164,7 +206,6 @@ async def sync_tiktok_posts(
 
     from app.core.database import AsyncSessionLocal
     from app.models.brand import Brand
-    from app.models.tiktok_post import TikTokPost
 
     async with AsyncSessionLocal() as db:
         result = await db.execute(select(Brand).where(Brand.id == brand_id))
@@ -200,37 +241,7 @@ async def sync_tiktok_posts(
             download_covers=dl_covers,
         )
 
-        for item in items:
-            video_id = _video_id_from_item(item)
-            if not video_id:
-                continue
-
-            existing = await db.execute(
-                select(TikTokPost).where(
-                    TikTokPost.brand_id == brand_id,
-                    TikTokPost.video_id == video_id,
-                )
-            )
-            post = existing.scalar_one_or_none()
-            if not post:
-                post = TikTokPost(
-                    id=str(uuid.uuid4()),
-                    brand_id=brand_id,
-                    video_id=video_id,
-                )
-                db.add(post)
-
-            post.web_video_url = _media_url(item) or item.get("webVideoUrl") or item.get("web_video_url")
-            post.caption = item.get("text") or item.get("desc")
-            post.author_username = _author_username(item)
-            post.play_count = item.get("playCount")
-            post.digg_count = item.get("diggCount")
-            post.comment_count = item.get("commentCount")
-            post.share_count = item.get("shareCount")
-            post.raw_post = json.dumps(item, ensure_ascii=False)
-            comments = _extract_comments(item)
-            post.comments_json = json.dumps(comments, ensure_ascii=False) if comments else None
-
+        await upsert_tiktok_post_items(db, brand_id, items)
         await db.commit()
 
     from app.services.ingestion.finalize import finalize_brand_ingestion

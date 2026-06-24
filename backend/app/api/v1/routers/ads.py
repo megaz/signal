@@ -34,23 +34,29 @@ async def trigger_sync(brand_id: str, background_tasks: BackgroundTasks):
 async def trigger_tiktok_apify_sync(
     brand_id: str,
     background_tasks: BackgroundTasks,
-    query: str | None = Query(None, description="Search query; defaults to brand name"),
-    country: str = Query("GB", description="Ad Library region (GB for US brand searches)"),
-    mode: str = Query("ad_library", pattern="^(auto|ad_library|creative_center)$"),
-    max_pages: int = Query(3, ge=1, le=20),
-    industry: str | None = Query(None),
-    filter_query: bool = Query(True, description="Drop ads that don't mention the query term"),
+    handle: str | None = Query(
+        None,
+        description="TikTok handle to collect tagged posts for (default celsiusofficial)",
+    ),
+    query: str | None = Query(None, description="Fallback for resolving brand handle from name"),
+    max_posts: int = Query(100, ge=1, le=200),
+    results_per_page: int = Query(100, ge=1, le=100),
+    comments_per_post: int = Query(25, ge=0, le=100),
+    include_profile_posts: bool = Query(
+        True,
+        description="Also scrape videos published on the @handle profile",
+    ),
 ):
-    """Kick off a background TikTok ad scrape via Apify (scripts/run_scrape_tiktok_ads.sh)."""
+    """Scrape all TikTok posts that @-mention a handle (e.g. celsiusofficial) via Apify."""
     background_tasks.add_task(
         sync_tiktok_apify_ads,
         brand_id,
+        handle=handle,
         query=query,
-        country=country,
-        mode=mode,
-        max_pages=max_pages,
-        industry=industry,
-        filter_query=filter_query,
+        max_posts=max_posts,
+        results_per_page=results_per_page,
+        comments_per_post=comments_per_post,
+        include_profile_posts=include_profile_posts,
     )
     return {"queued": True}
 

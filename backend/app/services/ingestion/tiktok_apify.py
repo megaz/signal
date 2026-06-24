@@ -1,14 +1,12 @@
 """
-TikTok Ad Library scraper via Apify (keyword search).
+TikTok post ingestion via Apify clockworks/tiktok-scraper.
 
-Wraps scripts/run_scrape_tiktok_ads.sh using the Ad Library actor by default —
-the most accurate source for brand/search-term queries. Creative Center
-(mode=creative_center) is available but only returns loosely keyword-matched
-trending ads.
+Discovers all posts that @-mention or are published by a brand handle
+(default celsiusofficial), upserts into tiktok_posts, then promotes to ads
+and runs fatigue scoring + similarity clustering.
 """
 import asyncio
 import importlib.util
-from datetime import date
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -17,20 +15,21 @@ from app.config import get_settings
 
 settings = get_settings()
 
+DEFAULT_HANDLE = "celsiusofficial"
+
 
 def _scraper_script_path() -> Path:
-    """Resolve scrape_tiktok_ads.py in repo layout or Docker /scripts mount."""
     here = Path(__file__).resolve()
     candidates = [
-        here.parents[4] / "scripts" / "scrape_tiktok_ads.py",  # repo: backend/app/services/ingestion
-        here.parents[3] / "scripts" / "scrape_tiktok_ads.py",  # if backend is repo root
-        Path("/scripts/scrape_tiktok_ads.py"),                  # docker-compose volume
+        here.parents[4] / "scripts" / "scrape_tiktok_posts.py",
+        here.parents[3] / "scripts" / "scrape_tiktok_posts.py",
+        Path("/scripts/scrape_tiktok_posts.py"),
     ]
     for path in candidates:
         if path.is_file():
             return path
     raise ImportError(
-        "Cannot find scripts/scrape_tiktok_ads.py. "
+        "Cannot find scripts/scrape_tiktok_posts.py. "
         "Mount ./scripts into the API container or run from the repo root."
     )
 
@@ -38,7 +37,7 @@ def _scraper_script_path() -> Path:
 @lru_cache(maxsize=1)
 def _scraper_module():
     path = _scraper_script_path()
-    spec = importlib.util.spec_from_file_location("scrape_tiktok_ads", path)
+    spec = importlib.util.spec_from_file_location("scrape_tiktok_posts", path)
     if spec is None or spec.loader is None:
         raise ImportError(f"Cannot load scraper from {path}")
     mod = importlib.util.module_from_spec(spec)
@@ -46,15 +45,29 @@ def _scraper_module():
     return mod
 
 
-def _run_scraper_sync(
-    query: str,
+def _resolve_handle(
+    handle: str | None,
     *,
-    country: str = "GB",
-    mode: str = "ad_library",
-    max_pages: int = 3,
-    industry: str | None = None,
-    period: str = "180",
-    filter_query: bool = True,
+    brand_tiktok_account_id: str | None,
+    brand_name: str | None,
+    query: str | None,
+) -> str:
+    if handle:
+        return handle.lstrip("@")
+    if brand_tiktok_account_id:
+        return brand_tiktok_account_id.lstrip("@")
+    scraper = _scraper_module()
+    suggested = scraper.suggest_profile(query, brand_name)
+    return suggested or DEFAULT_HANDLE
+
+
+def _run_tagged_scraper_sync(
+    handle: str,
+    *,
+    results_per_page: int = 100,
+    comments_per_post: int = 25,
+    max_posts: int = 100,
+    include_profile_posts: bool = True,
 ) -> list[dict[str, Any]]:
     scraper = _scraper_module()
     token = settings.apify_token
@@ -63,91 +76,61 @@ def _run_scraper_sync(
             "APIFY_TOKEN is not configured. Add it to backend/.env to enable TikTok Apify ingestion."
         )
 
-    resolved_industry = industry or scraper.suggest_industry(query)
-    _, normalized = scraper.run_tiktok_ads_scraper(
-        token=token,
-        query=query,
-        actor_id=scraper.DEFAULT_ACTOR_ID,
-        mode=mode,
-        max_pages=max_pages,
-        country=country,
-        start_date=None,
-        end_date=None,
-        quick_search=False,
-        period=period,
-        industry=resolved_industry,
-        filter_query=filter_query,
-        fallback_ad_library=False,
+    _, detail_items = scraper.run_tagged_posts_scraper(
+        token,
+        handle,
+        results_per_page=results_per_page,
+        comments_per_post=comments_per_post,
+        max_posts=max_posts,
+        include_profile_posts=include_profile_posts,
     )
-    return normalized
+    return detail_items
 
 
-async def fetch_ads_for_query(
-    query: str,
+async def fetch_tagged_posts(
+    handle: str,
     *,
-    country: str = "GB",
-    mode: str = "ad_library",
-    max_pages: int = 3,
-    industry: str | None = None,
-    period: str = "180",
-    filter_query: bool = True,
+    results_per_page: int = 100,
+    comments_per_post: int = 25,
+    max_posts: int = 100,
+    include_profile_posts: bool = True,
 ) -> list[dict[str, Any]]:
-    """Run the Apify TikTok scraper for a brand/keyword query (blocking I/O in executor)."""
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(
         None,
-        lambda: _run_scraper_sync(
-            query,
-            country=country,
-            mode=mode,
-            max_pages=max_pages,
-            industry=industry,
-            period=period,
-            filter_query=filter_query,
+        lambda: _run_tagged_scraper_sync(
+            handle,
+            results_per_page=results_per_page,
+            comments_per_post=comments_per_post,
+            max_posts=max_posts,
+            include_profile_posts=include_profile_posts,
         ),
     )
-
-
-def compute_run_days(start: str | None, end: str | None) -> int:
-    if not start:
-        return 0
-    try:
-        t0 = date.fromisoformat(str(start)[:10])
-        t1 = date.fromisoformat(str(end)[:10]) if end else date.today()
-        return max((t1 - t0).days, 0)
-    except ValueError:
-        return 0
-
-
-def _reach_bucket(impressions: Any) -> str | None:
-    if impressions is None:
-        return None
-    text = str(impressions).lower()
-    if "high" in text or "1m" in text:
-        return "high"
-    if "mid" in text or "100k" in text:
-        return "mid"
-    if "low" in text:
-        return "low"
-    return str(impressions)[:32]
 
 
 async def sync_tiktok_apify_ads(
     brand_id: str,
     *,
+    handle: str | None = None,
     query: str | None = None,
+    max_posts: int = 100,
+    results_per_page: int = 100,
+    comments_per_post: int = 25,
+    include_profile_posts: bool = True,
+    # kept for API compatibility — no longer used
     country: str = "GB",
     mode: str = "ad_library",
     max_pages: int = 3,
     industry: str | None = None,
     filter_query: bool = True,
 ) -> None:
-    """Background task: scrape TikTok ads via Apify and upsert into DB."""
+    """Background task: scrape posts tagged @handle and upsert into tiktok_posts."""
+    from sqlalchemy import select
+
     from app.core.database import AsyncSessionLocal
     from app.models.brand import Brand
-    from app.models.ad import Ad, AdPlatform
-    from sqlalchemy import select
-    import uuid
+    from app.services.ingestion.tiktok_posts import upsert_tiktok_post_items
+    from app.services.ingestion.finalize import finalize_brand_ingestion
 
     async with AsyncSessionLocal() as db:
         result = await db.execute(select(Brand).where(Brand.id == brand_id))
@@ -155,47 +138,22 @@ async def sync_tiktok_apify_ads(
         if not brand:
             return
 
-        search_query = query or brand.name
-        normalized = await fetch_ads_for_query(
-            search_query,
-            country=country,
-            mode=mode,
-            max_pages=max_pages,
-            industry=industry,
-            filter_query=filter_query,
+        resolved_handle = _resolve_handle(
+            handle,
+            brand_tiktok_account_id=brand.tiktok_account_id,
+            brand_name=brand.name,
+            query=query,
         )
 
-        for item in normalized:
-            ad_id = item.get("ad_id")
-            if not ad_id:
-                continue
+        items = await fetch_tagged_posts(
+            resolved_handle,
+            results_per_page=results_per_page,
+            comments_per_post=comments_per_post,
+            max_posts=max_posts,
+            include_profile_posts=include_profile_posts,
+        )
 
-            external_id = str(ad_id)
-            existing = await db.execute(
-                select(Ad).where(
-                    Ad.external_id == external_id,
-                    Ad.platform == AdPlatform.tiktok,
-                )
-            )
-            ad = existing.scalar_one_or_none()
-            if not ad:
-                ad = Ad(
-                    id=str(uuid.uuid4()),
-                    brand_id=brand_id,
-                    platform=AdPlatform.tiktok,
-                    external_id=external_id,
-                )
-                db.add(ad)
-
-            title = item.get("ad_text") or item.get("advertiser_name")
-            ad.title = (title or "")[:80] or None
-            ad.video_url = item.get("video_url")
-            ad.thumbnail_url = item.get("cover_url")
-            ad.run_days = compute_run_days(item.get("start_date"), item.get("end_date"))
-            ad.reach_bucket = _reach_bucket(item.get("impressions"))
-
+        await upsert_tiktok_post_items(db, brand_id, items)
         await db.commit()
 
-    from app.services.analysis.similarity_tree import cluster_brand_families
-
-    await cluster_brand_families(brand_id)
+    await finalize_brand_ingestion(brand_id, scope="profile_posts")
