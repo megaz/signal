@@ -190,16 +190,11 @@ def resolve_scrape_plan(
     mode: str,
     country: str,
 ) -> tuple[str, str]:
-    """Pick actor + scrape mode. Ad Library is used for EU keyword search."""
+    """Pick actor + scrape mode. Ad Library keyword search is most accurate for brand terms."""
     if actor_id not in (DEFAULT_ACTOR_ID, AD_LIBRARY_ACTOR_ID, CREATIVE_CENTER_ACTOR_ID):
         return actor_id, mode if mode != "auto" else "custom"
 
-    if mode == "auto":
-        if country.upper() in EU_AD_LIBRARY_COUNTRIES:
-            return AD_LIBRARY_ACTOR_ID, "ad_library"
-        return CREATIVE_CENTER_ACTOR_ID, "creative_center"
-
-    if mode == "ad_library":
+    if mode in ("auto", "ad_library"):
         return AD_LIBRARY_ACTOR_ID, "ad_library"
 
     return CREATIVE_CENTER_ACTOR_ID, "creative_center"
@@ -409,8 +404,8 @@ def main() -> None:
     parser.add_argument(
         "--mode",
         choices=["auto", "ad_library", "creative_center"],
-        default="auto",
-        help="auto: Ad Library for EU countries, Creative Center elsewhere (default).",
+        default="ad_library",
+        help="ad_library: keyword search (most accurate). auto: same as ad_library. creative_center: trending ads only.",
     )
 
     parser.add_argument(
@@ -428,8 +423,8 @@ def main() -> None:
 
     parser.add_argument(
         "--country",
-        default="US",
-        help="Country code (e.g. US, GB). Ad Library only supports EU/EEA/UK countries.",
+        default="GB",
+        help="Country code (e.g. US, GB). Ad Library uses EU/EEA/UK; non-EU requests fall back to GB.",
     )
 
     parser.add_argument(

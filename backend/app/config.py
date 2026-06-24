@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     tiktok_app_id: str = ""
     tiktok_secret: str = ""
 
+    # Apify (TikTok Ad Library scraper — scripts/run_scrape_tiktok_ads.sh)
+    apify_token: str = ""
+
     # Google Trends (no auth needed, via pytrends)
     trends_geo: str = "US"
 
