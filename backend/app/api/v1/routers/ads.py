@@ -9,6 +9,8 @@ from app.services.ingestion.meta_ad_library import sync_brand_ads
 from app.services.ingestion.tiktok_apify import sync_tiktok_apify_ads
 from app.services.ingestion.tiktok_posts import sync_tiktok_posts
 from app.services.analysis.beat_detector import detect_beats
+from app.schemas.brief import CreativeBrief
+from app.services.ai.brief_builder import build_creative_brief
 
 router = APIRouter()
 
@@ -21,6 +23,16 @@ async def get_ad(ad_id: str, db: AsyncSession = Depends(get_db)):
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Ad not found")
     return AdDetail.model_validate(ad)
+
+
+@router.post("/{ad_id}/brief", response_model=CreativeBrief)
+async def get_ad_brief(ad_id: str, db: AsyncSession = Depends(get_db)):
+    """Build a structured creative brief from ad + TikTok intelligence (no Luma call)."""
+    result = await db.execute(select(Ad).where(Ad.id == ad_id))
+    if not result.scalar_one_or_none():
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Ad not found")
+    return await build_creative_brief(ad_id, db)
 
 
 @router.post("/sync/{brand_id}")

@@ -20,6 +20,9 @@ export const useReviewStore = create<ReviewStore>((set, get) => ({
     set({ loading: true });
     const refresh = await reviewService.triggerGeneration(adId);
     set({ refresh, loading: false });
+    if (refresh.status === "generating") {
+      get().pollRefresh(adId);
+    }
   },
 
   pollRefresh: async (adId) => {

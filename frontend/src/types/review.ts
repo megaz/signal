@@ -1,4 +1,12 @@
-export type RefreshStatus = "pending" | "generating" | "ready" | "approved" | "shipped" | "rejected";
+import type { CreativeBrief } from "./brief";
+
+export type RefreshStatus =
+  | "pending"
+  | "generating"
+  | "ready"
+  | "approved"
+  | "shipped"
+  | "rejected";
 
 export interface Refresh {
   id: string;
@@ -6,4 +14,5 @@ export interface Refresh {
   video_url: string | null;
   status: RefreshStatus;
   reviewer_notes: string | null;
+  brief: CreativeBrief | null;
 }

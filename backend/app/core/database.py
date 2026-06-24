@@ -20,8 +20,19 @@ class Base(DeclarativeBase):
 
 
 async def init_db():
+    from sqlalchemy import text
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        if not _is_sqlite:
+            await conn.execute(
+                text("ALTER TABLE refreshes ADD COLUMN IF NOT EXISTS brief_json JSONB")
+            )
+        else:
+            try:
+                await conn.execute(text("ALTER TABLE refreshes ADD COLUMN brief_json JSON"))
+            except Exception:
+                pass
 
 
 async def get_db() -> AsyncSession:
