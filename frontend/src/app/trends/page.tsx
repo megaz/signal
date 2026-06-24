@@ -1,10 +1,10 @@
 import { AppShell } from "@/components/shell/AppShell";
-import { TrendsExplorer } from "@/components/trends/TrendsExplorer";
+import { CreativeLibrary } from "@/components/canvas/CreativeLibrary";
 
-export default function TrendsPage() {
+export default function LibraryPage() {
   return (
     <AppShell>
-      <TrendsExplorer />
+      <CreativeLibrary />
     </AppShell>
   );
 }

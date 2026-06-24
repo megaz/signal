@@ -2,31 +2,45 @@
 import { useCanvas } from "@/hooks/useCanvas";
 import { BeatCard } from "./BeatCard";
 import { GenerateButton } from "./GenerateButton";
+import { FONT, MUTED } from "@/lib/ui";
 
 interface Props {
   adId: string;
+  onAnalysisComplete?: () => void;
 }
 
-export function BeatCanvas({ adId }: Props) {
-  const { beats, loading, teardownRunning, runTeardown, requestFix, acceptFix } = useCanvas(adId);
+export function BeatCanvas({ adId, onAnalysisComplete }: Props) {
+  const { beats, loading, teardownRunning, requestFix, acceptFix } = useCanvas(adId, onAnalysisComplete);
 
   const allAccepted = beats.filter((b) => b.health !== "strong").every((b) => b.fix_accepted);
 
-  if (loading) {
-    return <div className="flex-1 flex items-center justify-center text-gray-500">Loading beats...</div>;
+  if (loading || teardownRunning) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center gap-3">
+        <div className="flex gap-2">
+          {[0, 1, 2].map((i) => (
+            <span
+              key={i}
+              style={{
+                width: 8, height: 8, borderRadius: 4, background: "#000",
+                animation: `pulse 1.2s ease-in-out ${i * 0.2}s infinite`,
+                opacity: 0.2,
+              }}
+            />
+          ))}
+        </div>
+        <p style={{ fontFamily: FONT, fontSize: 14, color: MUTED }}>
+          {teardownRunning ? "Analyzing your creative…" : "Loading…"}
+        </p>
+        <style>{`@keyframes pulse { 0%,100%{opacity:0.2} 50%{opacity:1} }`}</style>
+      </div>
+    );
   }
 
   if (beats.length === 0) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-4">
-        <p className="text-gray-500 text-sm">No beat analysis yet.</p>
-        <button
-          onClick={() => runTeardown(adId)}
-          disabled={teardownRunning}
-          className="px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white text-sm rounded-lg transition-colors disabled:opacity-50"
-        >
-          {teardownRunning ? "Analyzing..." : "Run teardown"}
-        </button>
+      <div className="flex-1 flex items-center justify-center">
+        <p style={{ fontFamily: FONT, fontSize: 14, color: MUTED }}>No beat data available.</p>
       </div>
     );
   }

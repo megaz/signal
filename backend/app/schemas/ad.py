@@ -15,6 +15,7 @@ class AdBase(BaseModel):
     reach_bucket: str | None
     variant_count: int
     creative_family_id: str | None
+    creative_tags: dict | None = None
 
 
 class AdNode(AdBase):

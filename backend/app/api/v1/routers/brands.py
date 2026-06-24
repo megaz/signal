@@ -1,3 +1,5 @@
+import json
+
 from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -90,3 +92,51 @@ async def get_brand_tiktok_posts(brand_id: str, db: AsyncSession = Depends(get_d
             for p in posts
         ]
     }
+
+
+@router.get("/{brand_id}/engagement")
+async def get_brand_engagement(brand_id: str, db: AsyncSession = Depends(get_db)):
+    """Real per-ad TikTok engagement + creator profile, joined ads.id == tiktok_posts.video_id.
+
+    Organic metrics only (views/likes/comments/shares/saves). Spend/revenue are not present in
+    organic data — they're estimated client-side from these real numbers and labeled "est.".
+    """
+    posts = (await db.execute(select(TikTokPost).where(TikTokPost.brand_id == brand_id))).scalars().all()
+    by_vid = {p.video_id: p for p in posts}
+
+    ads = (await db.execute(select(Ad).where(Ad.brand_id == brand_id))).scalars().all()
+
+    items = []
+    for ad in ads:
+        post = by_vid.get(ad.id) or by_vid.get(ad.external_id)
+        if not post:
+            continue
+        try:
+            raw = json.loads(post.raw_post) if post.raw_post else {}
+        except (ValueError, TypeError):
+            raw = {}
+        author = raw.get("authorMeta") or {}
+        views = post.play_count or 0
+        likes = post.digg_count or 0
+        comments = post.comment_count or 0
+        shares = post.share_count or 0
+        saves = raw.get("collectCount") or 0
+        engagements = likes + comments + shares + saves
+        items.append({
+            "ad_id": ad.id,
+            "views": views,
+            "likes": likes,
+            "comments": comments,
+            "shares": shares,
+            "saves": saves,
+            "engagement_rate": round(engagements / views, 4) if views else 0.0,
+            "author_name": author.get("name"),
+            "author_nick": author.get("nickName"),
+            "author_avatar": author.get("avatar"),
+            "author_verified": bool(author.get("verified")),
+            "author_fans": author.get("fans"),
+            "is_sponsored": bool(raw.get("isAd") or raw.get("isSponsored")),
+            "posted_at": raw.get("createTimeISO"),
+        })
+
+    return {"items": items}

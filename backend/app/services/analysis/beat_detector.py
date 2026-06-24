@@ -4,20 +4,20 @@ using Claude vision on sampled frames + transcript timing.
 
 In production this runs as a background task triggered after ad sync.
 """
-import uuid
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.core.database import AsyncSessionLocal
-from app.models.ad import Ad
-from app.models.beat import Beat, BeatType, BeatHealth
+from app.models.beat import Beat
 from app.services.ai.teardown import run_teardown
 
 
-_BEAT_ORDER = [BeatType.hook, BeatType.build, BeatType.product, BeatType.payoff, BeatType.cta]
-
-
 async def detect_beats(ad_id: str):
-    """Background entry-point; creates beat rows, then scores them."""
+    """Background entry-point; creates beat rows, then scores them.
+
+    Idempotent: skips if beats already exist for this ad.
+    """
     async with AsyncSessionLocal() as db:
+        existing = await db.execute(select(Beat).where(Beat.ad_id == ad_id).limit(1))
+        if existing.scalar_one_or_none() is not None:
+            return
         await run_teardown(ad_id, db)

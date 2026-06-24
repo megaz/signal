@@ -15,8 +15,8 @@ interface CanvasStore {
   copilotMessages: CopilotMessage[];
   copilotLoading: boolean;
 
-  loadBeats: (adId: string) => Promise<void>;
-  runTeardown: (adId: string) => Promise<void>;
+  loadBeats: (adId: string, onAnalysisComplete?: () => void) => Promise<void>;
+  runTeardown: (adId: string, onComplete?: () => void) => Promise<void>;
   requestFix: (beatId: string) => Promise<void>;
   acceptFix: (beatId: string) => Promise<void>;
   toggleCopilot: () => void;
@@ -31,16 +31,23 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   copilotMessages: [],
   copilotLoading: false,
 
-  loadBeats: async (adId) => {
+  loadBeats: async (adId, onAnalysisComplete) => {
     set({ loading: true });
     const beats = await canvasService.getBeats(adId);
-    set({ beats, loading: false });
+    if (beats.length === 0) {
+      // No beats yet — auto-trigger analysis
+      set({ loading: false });
+      await get().runTeardown(adId, onAnalysisComplete);
+    } else {
+      set({ beats, loading: false });
+    }
   },
 
-  runTeardown: async (adId) => {
+  runTeardown: async (adId, onComplete) => {
     set({ teardownRunning: true });
     const { beats } = await canvasService.runTeardown(adId);
     set({ beats, teardownRunning: false });
+    onComplete?.();
   },
 
   requestFix: async (beatId) => {

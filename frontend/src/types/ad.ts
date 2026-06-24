@@ -3,6 +3,15 @@ import type { Beat } from "@/types/beat";
 export type AdHealth = "thriving" | "aging" | "fatiguing" | "declining";
 export type AdPlatform = "meta" | "tiktok";
 
+export interface CreativeTags {
+  hook_dialogue?: string | null;
+  music_style?: string | null;
+  visual_emotion?: string | null;
+  cta_type?: string | null;
+  scene_transitions?: string | null;
+  character_type?: string | null;
+}
+
 export interface AdNode {
   id: string;
   brand_id: string;
@@ -15,6 +24,7 @@ export interface AdNode {
   reach_bucket: "high" | "mid" | "low" | null;
   variant_count: number;
   creative_family_id: string | null;
+  creative_tags: CreativeTags | null;
   started_at: string | null;
   last_seen_at: string | null;
 }

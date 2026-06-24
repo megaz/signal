@@ -13,6 +13,8 @@ from app.services.ingestion.orchestrator import collect_brand_data
 from app.services.analysis.beat_detector import detect_beats
 from app.schemas.brief import CreativeBrief
 from app.services.ai.brief_builder import build_creative_brief
+from app.schemas.analytics import AdAnalytics
+from app.services.analysis.creative_analytics import build_ad_analytics
 
 router = APIRouter()
 
@@ -27,6 +29,20 @@ async def get_ad(ad_id: str, db: AsyncSession = Depends(get_db)):
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Ad not found")
     return AdDetail.model_validate(ad)
+
+
+@router.get("/{ad_id}/analytics", response_model=AdAnalytics)
+async def get_ad_analytics(ad_id: str, db: AsyncSession = Depends(get_db)):
+    """Retention + growth curves and a generated culture map for a creative.
+
+    All series are derived from stored data: the ad's health/beats, its metric
+    snapshots, and the brand's real TikTok captions + engagement.
+    """
+    analytics = await build_ad_analytics(ad_id, db)
+    if analytics is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Ad not found")
+    return analytics
 
 
 @router.post("/{ad_id}/brief", response_model=CreativeBrief)

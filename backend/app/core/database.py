@@ -28,9 +28,16 @@ async def init_db():
             await conn.execute(
                 text("ALTER TABLE refreshes ADD COLUMN IF NOT EXISTS brief_json JSONB")
             )
+            await conn.execute(
+                text("ALTER TABLE ads ADD COLUMN IF NOT EXISTS creative_tags JSONB")
+            )
         else:
             try:
                 await conn.execute(text("ALTER TABLE refreshes ADD COLUMN brief_json JSON"))
+            except Exception:
+                pass
+            try:
+                await conn.execute(text("ALTER TABLE ads ADD COLUMN creative_tags JSON"))
             except Exception:
                 pass
 

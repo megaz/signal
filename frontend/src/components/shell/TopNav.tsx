@@ -3,9 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ImageWithFallback } from "@/app/components/figma/ImageWithFallback";
+import { SearchBox } from "@/components/shell/SearchBox";
 import imgAvatar from "@/imports/MacBookPro142/85510eea03b550927f9e55a6dd3a47e8d4de59a5.png";
 import imgLogo from "@/imports/MacBookPro142/dead263f5cd0cad1ebb5b08c03b9078354a946ff.png";
-import svgPaths from "@/imports/MacBookPro142/svg-hc5vql6mh7";
 
 const FONT = "'Poppins', sans-serif";
 const PAD = 40; // matches the landing page horizontal padding
@@ -15,7 +15,7 @@ const NAV_ITEMS = [
   { label: "Canvas",     href: "/canvas" },
   { label: "Monitoring", href: "/monitoring" },
   { label: "Radar",      href: "/radar" },
-  { label: "Trends",     href: "/trends" },
+  { label: "Library",    href: "/trends" },
 ];
 
 function isActive(pathname: string, href: string): boolean {
@@ -71,15 +71,7 @@ export function TopNav() {
         })}
       </nav>
 
-      <div
-        className="flex items-center gap-2 flex-1 min-w-0"
-        style={{ height: 46, borderRadius: 30, border: "2px solid #000", paddingLeft: 18, paddingRight: 16, marginLeft: 8, maxWidth: 300 }}
-      >
-        <svg style={{ width: 17, height: 17, flexShrink: 0 }} viewBox="0 0 21.7087 21.7055" fill="none">
-          <path d={svgPaths.p2ec3ce00} stroke="#000" strokeWidth="2" />
-        </svg>
-        <span style={{ fontFamily: FONT, fontWeight: 400, fontSize: 17, color: "rgba(0,0,0,0.5)" }}>Search</span>
-      </div>
+      <SearchBox />
 
       <div className="flex-1" />
 

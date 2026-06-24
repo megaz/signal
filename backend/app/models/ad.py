@@ -1,4 +1,4 @@
-from sqlalchemy import String, Float, Integer, DateTime, ForeignKey, Enum as SAEnum
+from sqlalchemy import String, Float, Integer, DateTime, ForeignKey, Enum as SAEnum, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from datetime import datetime
 import enum
@@ -33,6 +33,7 @@ class Ad(Base):
     reach_bucket: Mapped[str | None] = mapped_column(String)          # low/mid/high from platform
     variant_count: Mapped[int] = mapped_column(Integer, default=1)
     creative_family_id: Mapped[str | None] = mapped_column(String)    # groups related variants
+    creative_tags: Mapped[dict | None] = mapped_column(JSON)          # hook_dialogue, music_style, visual_emotion, cta_type, scene_transitions, character_type
     started_at: Mapped[datetime | None] = mapped_column(DateTime)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime)
     fetched_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

@@ -1,5 +1,7 @@
-"""Post-ingestion: fatigue scoring and similarity clustering."""
+"""Post-ingestion: fatigue scoring, similarity clustering, and background beat analysis."""
+import asyncio
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from app.core.database import AsyncSessionLocal
 from app.models.ad import Ad, AdHealth
@@ -33,7 +35,8 @@ async def score_brand_ads(brand_id: str, *, video_ids: list[str] | None = None) 
 
 async def finalize_brand_ingestion(brand_id: str, *, scope: str = "profile_posts") -> None:
     """
-    Promote posts to ads, score fatigue, and cluster creative families.
+    Promote posts to ads, score fatigue, cluster creative families, then auto-analyze
+    fatiguing/declining ads that haven't been analyzed yet.
 
     scope=profile_posts: only ads matching tiktok_posts.video_id (ignores junk Apify ads).
     scope=all: all ads for the brand.
@@ -48,3 +51,19 @@ async def finalize_brand_ingestion(brand_id: str, *, scope: str = "profile_posts
 
     await score_brand_ads(brand_id, video_ids=video_ids)
     await cluster_brand_families(brand_id, video_ids=video_ids)
+
+    # Auto-trigger beat analysis for fatiguing/declining ads with no beats yet
+    from app.services.analysis.beat_detector import detect_beats  # deferred to avoid circular
+
+    async with AsyncSessionLocal() as db:
+        query = select(Ad).where(
+            Ad.brand_id == brand_id,
+            Ad.health.in_([AdHealth.fatiguing, AdHealth.declining]),
+        ).options(selectinload(Ad.beats))
+        if video_ids is not None:
+            query = query.where(Ad.external_id.in_(video_ids))
+        ads = (await db.execute(query)).scalars().all()
+
+    needs_analysis = [a for a in ads if not a.beats]
+    if needs_analysis:
+        await asyncio.gather(*[detect_beats(a.id) for a in needs_analysis])
