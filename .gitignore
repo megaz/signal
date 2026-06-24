@@ -22,6 +22,7 @@ node_modules/
 .next/
 .env.local
 .env.production
+*.tsbuildinfo
 
 # OS
 .DS_Store
