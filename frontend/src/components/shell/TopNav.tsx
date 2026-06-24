@@ -11,11 +11,10 @@ const FONT = "'Poppins', sans-serif";
 const PAD = 40; // matches the landing page horizontal padding
 
 const NAV_ITEMS = [
-  { label: "Manager",    href: "/" },
-  { label: "Canvas",     href: "/canvas" },
+  { label: "Dashboard",  href: "/" },
+  { label: "Studio",     href: "/canvas" },
   { label: "Monitoring", href: "/monitoring" },
-  { label: "Radar",      href: "/radar" },
-  { label: "Library",    href: "/trends" },
+  { label: "AI Copilot", href: "/radar" },
 ];
 
 function isActive(pathname: string, href: string): boolean {

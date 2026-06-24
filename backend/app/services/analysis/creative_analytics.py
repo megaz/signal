@@ -198,25 +198,29 @@ _THEMES: list[tuple[str, str, list[str]]] = [
 ]
 
 
-def _theme_for(caption: str) -> set[str]:
+def _theme_for(caption: str) -> str:
+    """Assign a post to its single best-matching cultural theme."""
     text = caption.lower()
-    hits: set[str] = set()
+    best_key, best_hits = None, 0
     for key, _label, kws in _THEMES:
         if key == "creator":
             continue
-        if any(kw in text for kw in kws):
-            hits.add(key)
+        hits = sum(1 for kw in kws if kw in text)
+        if hits > best_hits:
+            best_key, best_hits = key, hits
+    if best_key:
+        return best_key
     if caption.count("@") >= 2:
-        hits.add("creator")
-    if not hits:
-        hits.add("lifestyle")  # brand default tone
-    return hits
+        return "creator"
+    return "lifestyle"  # brand default tone
 
 
-def _norm(x: float, lo: float, hi: float) -> float:
+def _norm(x: float, lo: float, hi: float, pad: float = 0.12) -> float:
+    """Normalise into a padded [pad, 1-pad] band so nodes never sit on the edge."""
     if hi <= lo:
         return 0.5
-    return max(0.0, min(1.0, (x - lo) / (hi - lo)))
+    t = (x - lo) / (hi - lo)
+    return round(pad + max(0.0, min(1.0, t)) * (1 - 2 * pad), 3)
 
 
 def build_culture_map(ad: Ad, posts: list[TikTokPost]) -> CultureMap:
@@ -228,53 +232,54 @@ def build_culture_map(ad: Ad, posts: list[TikTokPost]) -> CultureMap:
     """
     label_by_key = {k: lbl for k, lbl, _ in _THEMES}
 
-    # Aggregate real engagement per theme.
+    # Aggregate real engagement per theme (each post → one primary theme).
     agg: dict[str, dict] = {k: {"plays": 0, "inter": 0, "posts": 0} for k, _, _ in _THEMES}
     for p in posts:
         plays = p.play_count or 0
         inter = (p.digg_count or 0) + (p.comment_count or 0) * 3 + (p.share_count or 0) * 5
-        for key in _theme_for(p.caption or ""):
-            agg[key]["plays"] += plays
-            agg[key]["inter"] += inter
-            agg[key]["posts"] += 1
+        key = _theme_for(p.caption or "")
+        agg[key]["plays"] += plays
+        agg[key]["inter"] += inter
+        agg[key]["posts"] += 1
 
     active = {k: v for k, v in agg.items() if v["posts"] > 0}
     if not active:
         active = {"lifestyle": {"plays": 1, "inter": 1, "posts": 1}}
 
-    play_vals = [v["plays"] for v in active.values()]
-    # interaction rate = interactions per play (resonance / emotional pull)
+    # Log-scale reach (plays) and interaction rate to tame viral skew so themes
+    # spread across the map instead of collapsing into one corner.
+    log_plays = {k: math.log10(max(10, v["plays"])) for k, v in active.items()}
     rates = {k: (v["inter"] / v["plays"] if v["plays"] else 0.0) for k, v in active.items()}
-    lo_p, hi_p = min(play_vals), max(play_vals)
-    lo_r, hi_r = min(rates.values()), max(rates.values())
+    log_rates = {k: math.log10(max(1e-4, r) * 1000 + 1) for k, r in rates.items()}
+    lo_p, hi_p = min(log_plays.values()), max(log_plays.values())
+    lo_r, hi_r = min(log_rates.values()), max(log_rates.values())
     total_eng = sum(v["plays"] + v["inter"] for v in active.values()) or 1
 
     # Which themes this creative leans into (from its own caption/title).
-    own_themes = _theme_for((ad.title or ""))
+    own = _theme_for(ad.title or "")
 
     nodes: list[CultureNode] = []
     for key, v in active.items():
         eng = v["plays"] + v["inter"]
         strength = eng / total_eng
-        x = _norm(v["plays"], lo_p, hi_p)
-        y = _norm(rates[key], lo_r, hi_r)
-        # spread degenerate single-theme cases toward centre
+        x = _norm(log_plays[key], lo_p, hi_p)
+        y = _norm(log_rates[key], lo_r, hi_r)
         if len(active) == 1:
             x, y = 0.5, 0.5
-        rate = rates[key]
-        sentiment = "positive" if rate >= (lo_r + hi_r) / 2 else "neutral"
-        if x < 0.34 and strength < 0.12:
-            sentiment = "watch"  # niche + low share → emerging/under-leveraged
+        mid_r = (lo_r + hi_r) / 2
+        sentiment = "positive" if log_rates[key] >= mid_r else "neutral"
+        if x < 0.4 and strength < 0.1:
+            sentiment = "watch"  # niche + low share → emerging / under-leveraged
         nodes.append(CultureNode(
             id=key,
             label=label_by_key[key],
             strength=round(strength, 3),
-            x=round(x, 3),
-            y=round(y, 3),
+            x=x,
+            y=y,
             engagement=int(eng),
             posts=v["posts"],
             sentiment=sentiment,
-            aligned=key in own_themes,
+            aligned=key == own,
         ))
 
     nodes.sort(key=lambda nd: nd.strength, reverse=True)

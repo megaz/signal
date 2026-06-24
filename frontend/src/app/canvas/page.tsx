@@ -122,7 +122,7 @@ export default function CanvasPage() {
     <AppShell>
       <div className="flex-1 min-h-0 overflow-y-auto" style={{ paddingLeft: PAGE_PAD, paddingRight: PAGE_PAD, paddingBottom: PAGE_PAD }}>
         <div style={{ marginTop: 20 }}>
-          <h1 style={{ fontFamily: FONT, fontWeight: 500, fontSize: 26, color: INK }}>Canvas</h1>
+          <h1 style={{ fontFamily: FONT, fontWeight: 500, fontSize: 26, color: INK }}>Studio</h1>
           <p style={{ fontFamily: FONT, fontSize: 14, color: MUTED, marginTop: 4 }}>
             Fix fatigued creatives — select an ad to run AI teardown and propose beat-level repairs.
           </p>

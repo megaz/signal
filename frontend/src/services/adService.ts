@@ -1,5 +1,6 @@
 import { api } from "./api";
 import type { AdNode, AdDetail, BrandStats } from "@/types/ad";
+import type { AdAnalytics } from "@/types/analytics";
 
 export const adService = {
   getWebNodes: (brandId: string, includeCompetitors = false) =>
@@ -12,6 +13,9 @@ export const adService = {
 
   getAd: (adId: string) =>
     api.get<AdDetail>(`/ads/${adId}`),
+
+  getAnalytics: (adId: string) =>
+    api.get<AdAnalytics>(`/ads/${adId}/analytics`),
 
   triggerSync: (brandId: string) =>
     api.post(`/ads/sync/${brandId}`),

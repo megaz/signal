@@ -6,6 +6,8 @@ import { TopNav } from "@/components/shell/TopNav";
 import { adService } from "@/services/adService";
 import type { AdDetail } from "@/types/ad";
 import type { Beat } from "@/types/beat";
+import type { AdAnalytics, CulturalSignal as CulturalSignalT } from "@/types/analytics";
+import { RetentionChart, GrowthChart, CultureMap } from "@/components/analytics";
 
 const FONT = "'Poppins', sans-serif";
 
@@ -32,7 +34,6 @@ function capitalize(s: string) { return s.charAt(0).toUpperCase() + s.slice(1); 
 
 // ─── Derived data ─────────────────────────────────────────────────────────────
 type Signal = { icon: string; title: string; detail: string; sentiment: "pos" | "neu" | "neg" };
-type CulturalRef = { tag: string; title: string; desc: string; url: string; source: string };
 
 function deriveSignals(ad: AdDetail): Signal[] {
   const sc = Math.round(ad.health_score * 100);
@@ -54,17 +55,17 @@ function deriveSignals(ad: AdDetail): Signal[] {
   return out;
 }
 
-function deriveCulturalRefs(ad: AdDetail): CulturalRef[] {
+function deriveCulturalRefs(ad: AdDetail): CulturalSignalT[] {
   const s = toStatus(ad.health);
-  const out: CulturalRef[] = [
-    { tag: "Trend", title: "Top creative formats this week", desc: "Real-time data on which hooks, formats and CTAs are generating highest engagement by vertical.", url: "https://ads.tiktok.com/business/creativecenter/inspiration/popular/pc/en", source: "TikTok Creative Center" },
-    { tag: "Competitive", title: "Active creatives in your category", desc: "Browse what competitors are running to identify format gaps and creative whitespace.", url: "https://www.facebook.com/ads/library", source: "Meta Ad Library" },
+  const out: CulturalSignalT[] = [
+    { tag: "Trend", title: "Top creative formats this week", description: "Real-time data on which hooks, formats and CTAs are generating highest engagement by vertical.", url: "https://ads.tiktok.com/business/creativecenter/inspiration/popular/pc/en", source: "TikTok Creative Center" },
+    { tag: "Competitive", title: "Active creatives in your category", description: "Browse what competitors are running to identify format gaps and creative whitespace.", url: "https://www.facebook.com/ads/library", source: "Meta Ad Library" },
   ];
   if (s === "thriving") {
-    out.push({ tag: "Cultural moment", title: "Rising audience intent signal", desc: "Google Trends shows a sustained upward trajectory for the messaging pillar this creative targets.", url: "https://trends.google.com/trends/explore", source: "Google Trends" });
+    out.push({ tag: "Cultural moment", title: "Rising audience intent signal", description: "Google Trends shows a sustained upward trajectory for the messaging pillar this creative targets.", url: "https://trends.google.com/trends/explore", source: "Google Trends" });
   } else {
-    out.push({ tag: "Wear-out research", title: "Format fatigue benchmarks", desc: "Kantar data shows performance-first formats see ~40% efficiency decline after 3–4 weeks of continuous spend.", url: "https://www.kantar.com/campaigns/brandz", source: "Kantar BrandZ" });
-    out.push({ tag: "Attention data", title: "Novelty-first hook benchmarks", desc: "Nielsen attention metrics show TikTok/Reels audiences re-engage sharply with novelty — optimal refresh cadence is 2 weeks.", url: "https://www.nielsen.com/insights/", source: "Nielsen Insights" });
+    out.push({ tag: "Wear-out research", title: "Format fatigue benchmarks", description: "Kantar data shows performance-first formats see ~40% efficiency decline after 3–4 weeks of continuous spend.", url: "https://www.kantar.com/campaigns/brandz", source: "Kantar BrandZ" });
+    out.push({ tag: "Attention data", title: "Novelty-first hook benchmarks", description: "Nielsen attention metrics show TikTok/Reels audiences re-engage sharply with novelty — optimal refresh cadence is 2 weeks.", url: "https://www.nielsen.com/insights/", source: "Nielsen Insights" });
   }
   return out;
 }
@@ -147,7 +148,7 @@ function SignalCard({ s }: { s: Signal }) {
 }
 
 // ─── Cultural ref card ────────────────────────────────────────────────────────
-function CulturalCard({ s }: { s: CulturalRef }) {
+function CulturalCard({ s }: { s: CulturalSignalT }) {
   return (
     <a href={s.url} target="_blank" rel="noopener noreferrer"
       style={{ display: "flex", flexDirection: "column", gap: 6, padding: "14px 16px", border: `1px solid ${C.border}`, borderRadius: 12, textDecoration: "none", background: C.card, flex: 1, minWidth: 180 }}>
@@ -156,7 +157,7 @@ function CulturalCard({ s }: { s: CulturalRef }) {
         <span style={{ fontSize: 11, color: C.subtle }}>↗</span>
       </div>
       <span style={{ fontFamily: FONT, fontWeight: 600, fontSize: 13, color: "#000", lineHeight: 1.35 }}>{s.title}</span>
-      <span style={{ fontFamily: FONT, fontWeight: 400, fontSize: 12, color: C.muted, lineHeight: 1.55 }}>{s.desc}</span>
+      <span style={{ fontFamily: FONT, fontWeight: 400, fontSize: 12, color: C.muted, lineHeight: 1.55 }}>{s.description}</span>
       <span style={{ fontFamily: FONT, fontWeight: 500, fontSize: 11, color: C.subtle, marginTop: 2 }}>{s.source}</span>
     </a>
   );
@@ -208,12 +209,14 @@ function BeatCard({ beat, index }: { beat: Beat; index: number }) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function AdDetailPage({ params }: { params: { adId: string } }) {
   const [ad, setAd] = useState<AdDetail | null>(null);
+  const [analytics, setAnalytics] = useState<AdAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     adService.getAd(params.adId).then(setAd).catch(() => setError("Could not load creative data.")).finally(() => setLoading(false));
+    adService.getAnalytics(params.adId).then(setAnalytics).catch(() => {});
   }, [params.adId]);
 
   const status = ad ? toStatus(ad.health) : "fatigued";
@@ -221,7 +224,7 @@ export default function AdDetailPage({ params }: { params: { adId: string } }) {
   const score = ad ? Math.round(ad.health_score * 100) : 0;
   const beats = [...(ad?.beats ?? [])].sort((a, b) => a.order - b.order);
   const signals = ad ? deriveSignals(ad) : [];
-  const cultural = ad ? deriveCulturalRefs(ad) : [];
+  const cultural: CulturalSignalT[] = analytics?.cultural_signals ?? (ad ? deriveCulturalRefs(ad) : []);
 
   const ctaLabel   = status === "thriving" ? "Scale this strategy →" : status === "aging" ? "Develop a variant →" : "Diagnose & Refresh →";
   const ctaSub     = status === "thriving" ? "See signal evidence and plan amplification" : status === "aging" ? "View the decision path and next steps" : "Full decision path — drop-off, brief and next creative";
@@ -333,6 +336,33 @@ export default function AdDetailPage({ params }: { params: { adId: string } }) {
                 </div>
               </Section>
             </div>
+
+            {/* Performance trends — retention + growth graphs */}
+            {analytics && (
+              <div style={{ background: C.card, borderRadius: 18, border: `1px solid ${C.border}`, padding: "22px 28px", marginTop: 4 }}>
+                <Section title="Performance trends" subtitle="How attention holds across the runtime and how reach has compounded since launch.">
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+                    <div>
+                      <p style={{ fontFamily: FONT, fontWeight: 600, fontSize: 12, color: "#000", margin: "0 0 12px" }}>Audience retention</p>
+                      <RetentionChart points={analytics.retention} summary={analytics.retention_summary} color={statusColor} />
+                    </div>
+                    <div>
+                      <p style={{ fontFamily: FONT, fontWeight: 600, fontSize: 12, color: "#000", margin: "0 0 12px" }}>Reach growth</p>
+                      <GrowthChart points={analytics.growth} summary={analytics.growth_summary} color={statusColor} />
+                    </div>
+                  </div>
+                </Section>
+              </div>
+            )}
+
+            {/* Culture map — generated from the brand's real cultural footprint */}
+            {analytics && (
+              <div style={{ background: C.card, borderRadius: 18, border: `1px solid ${C.border}`, padding: "22px 28px", marginTop: 4 }}>
+                <Section title="Culture map" subtitle="Where this creative sits in the brand's cultural footprint — generated from real audience engagement across themes.">
+                  <CultureMap data={analytics.culture_map} />
+                </Section>
+              </div>
+            )}
 
             {/* Market & cultural context */}
             <div style={{ background: C.card, borderRadius: 18, border: `1px solid ${C.border}`, padding: "22px 28px", marginTop: 4 }}>

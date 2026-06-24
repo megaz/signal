@@ -2,10 +2,13 @@
 import { useState, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useCanvasStore } from "@/stores/canvasStore";
+import { FONT, INK, MUTED, BORDER } from "@/lib/ui";
 
 interface Props {
   adId: string;
 }
+
+const ACCENT = "#8a8bc7"; // periwinkle from the logo gradient — the "AI" accent
 
 export function CoPilot({ adId }: Props) {
   const { copilotOpen, copilotMessages, copilotLoading, toggleCopilot, askCopilot } = useCanvasStore();
@@ -24,61 +27,115 @@ export function CoPilot({ adId }: Props) {
       {/* Pill trigger */}
       <button
         onClick={toggleCopilot}
-        className="absolute bottom-6 right-6 z-10 flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-full text-sm font-medium transition-colors shadow-lg"
+        className="absolute z-10 flex items-center transition-transform hover:scale-[1.03]"
+        style={{
+          bottom: 24,
+          right: 24,
+          gap: 8,
+          padding: "10px 16px",
+          background: "#fff",
+          border: `1.5px solid ${INK}`,
+          borderRadius: 30,
+          fontFamily: FONT,
+          fontWeight: 600,
+          fontSize: 14,
+          color: INK,
+          boxShadow: "0 6px 20px rgba(0,0,0,0.12)",
+        }}
       >
-        <span className="w-2 h-2 rounded-full bg-orange-500" />
+        <span style={{ width: 8, height: 8, borderRadius: 4, background: ACCENT }} />
         Co-pilot
       </button>
 
       <AnimatePresence>
         {copilotOpen && (
           <motion.aside
-            initial={{ x: 320, opacity: 0 }}
+            initial={{ x: 340, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
-            exit={{ x: 320, opacity: 0 }}
+            exit={{ x: 340, opacity: 0 }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            className="absolute right-0 top-0 h-full w-80 bg-gray-900 border-l border-gray-800 flex flex-col z-20 shadow-2xl"
+            className="absolute right-0 top-0 h-full flex flex-col z-20"
+            style={{ width: 340, background: "#fff", borderLeft: `1.5px solid ${BORDER}`, boxShadow: "-12px 0 32px rgba(0,0,0,0.08)" }}
           >
-            <div className="p-4 border-b border-gray-800 flex items-center justify-between">
-              <span className="font-medium text-sm">AI Co-pilot</span>
-              <button onClick={toggleCopilot} className="text-gray-500 hover:text-gray-300 text-xs">close</button>
+            <div className="flex items-center justify-between" style={{ padding: 16, borderBottom: `1.5px solid ${BORDER}` }}>
+              <div className="flex items-center" style={{ gap: 8 }}>
+                <span style={{ width: 8, height: 8, borderRadius: 4, background: ACCENT }} />
+                <span style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14, color: INK }}>AI Co-pilot</span>
+              </div>
+              <button
+                onClick={toggleCopilot}
+                style={{ fontFamily: FONT, fontSize: 12, color: MUTED }}
+                className="hover:opacity-70 transition-opacity"
+              >
+                Close
+              </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-3 text-sm">
+            <div className="flex-1 overflow-y-auto" style={{ padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
               {copilotMessages.length === 0 && (
-                <p className="text-gray-500 text-xs">Ask anything about this ad — its creative choices, why beats are weak, or what the fix targets.</p>
+                <p style={{ fontFamily: FONT, fontSize: 13, lineHeight: 1.55, color: MUTED }}>
+                  Ask anything about this creative — why a beat is weak, what the fix targets, or what trend to lean into.
+                </p>
               )}
-              {copilotMessages.map((msg, i) => (
-                <div key={i} className={msg.role === "user" ? "text-right" : "text-left"}>
-                  <span
-                    className={`inline-block px-3 py-2 rounded-xl max-w-[90%] text-xs leading-relaxed ${
-                      msg.role === "user"
-                        ? "bg-orange-700/40 text-orange-100"
-                        : "bg-gray-800 text-gray-200"
-                    }`}
-                  >
-                    {msg.content}
-                  </span>
-                </div>
-              ))}
+              {copilotMessages.map((msg, i) => {
+                const isUser = msg.role === "user";
+                return (
+                  <div key={i} className={isUser ? "self-end" : "self-start"} style={{ maxWidth: "90%" }}>
+                    <span
+                      style={{
+                        display: "inline-block",
+                        padding: "9px 12px",
+                        borderRadius: 14,
+                        fontFamily: FONT,
+                        fontSize: 13,
+                        lineHeight: 1.5,
+                        background: isUser ? INK : "#f4f4f5",
+                        color: isUser ? "#fff" : INK,
+                      }}
+                    >
+                      {msg.content}
+                    </span>
+                  </div>
+                );
+              })}
               {copilotLoading && (
-                <div className="text-xs text-gray-500 animate-pulse">Thinking...</div>
+                <span style={{ fontFamily: FONT, fontSize: 12, color: MUTED }} className="animate-pulse">
+                  Thinking…
+                </span>
               )}
             </div>
 
-            <div className="p-3 border-t border-gray-800 flex gap-2">
+            <div className="flex" style={{ gap: 8, padding: 12, borderTop: `1.5px solid ${BORDER}` }}>
               <input
                 ref={inputRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleSend()}
-                placeholder="Ask..."
-                className="flex-1 text-xs bg-gray-800 rounded-lg px-3 py-2 outline-none placeholder:text-gray-600 focus:ring-1 focus:ring-orange-500"
+                placeholder="Ask about this creative…"
+                className="flex-1 min-w-0 outline-none"
+                style={{
+                  fontFamily: FONT,
+                  fontSize: 13,
+                  color: INK,
+                  background: "#f4f4f5",
+                  borderRadius: 10,
+                  padding: "9px 12px",
+                  border: `1.5px solid transparent`,
+                }}
               />
               <button
                 onClick={handleSend}
                 disabled={copilotLoading}
-                className="text-xs px-3 py-1.5 bg-orange-600 hover:bg-orange-500 disabled:opacity-40 text-white rounded-lg transition-colors"
+                className="transition-transform hover:scale-[1.03] disabled:opacity-40"
+                style={{
+                  fontFamily: FONT,
+                  fontWeight: 600,
+                  fontSize: 13,
+                  color: "#fff",
+                  background: INK,
+                  borderRadius: 10,
+                  padding: "0 16px",
+                }}
               >
                 Send
               </button>

@@ -4,8 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import svgPaths from "@/imports/MacBookPro142/svg-hc5vql6mh7";
 import { TopNav } from "@/components/shell/TopNav";
+import { ImageWithFallback } from "@/app/components/figma/ImageWithFallback";
 import { adService } from "@/services/adService";
+import { engagementService } from "@/services/engagementService";
+import { formatCompact } from "@/lib/format";
 import type { AdHealth, AdNode, BrandStats } from "@/types/ad";
+import type { Engagement } from "@/types/engagement";
 
 // ─── Config ─────────────────────────────────────────────────────────────────────
 const BRAND_ID = process.env.NEXT_PUBLIC_DEMO_BRAND_ID ?? "celsius";
@@ -698,8 +702,75 @@ function Gallery({ ads }: { ads: AdNode[] }) {
 
 // ─── Root ─────────────────────────────────────────────────────────────────────
 
+// Celsius brand identity (logo / followers) from the real TikTok creator profile.
+function useBrandCreator(brandId: string) {
+  const [creator, setCreator] = useState<Engagement | null>(null);
+  const [totalViews, setTotalViews] = useState(0);
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    engagementService
+      .getForBrand(brandId)
+      .then((res) => {
+        if (!alive) return;
+        const items = res.items ?? [];
+        setCreator(items.find((e) => e.author_avatar) ?? null);
+        setTotalViews(items.reduce((s, e) => s + (e.views || 0), 0));
+        setCount(items.length);
+      })
+      .catch(() => {
+        /* header simply hides if engagement isn't available */
+      });
+    return () => {
+      alive = false;
+    };
+  }, [brandId]);
+  return { creator, totalViews, count };
+}
+
+function VerifiedTick({ size = 18 }: { size?: number }) {
+  return (
+    <span className="inline-flex items-center justify-center flex-none" style={{ width: size, height: size, borderRadius: size / 2, background: "#3B9BFF" }}>
+      <svg width={size * 0.6} height={size * 0.6} viewBox="0 0 12 12">
+        <path d="M2.5 6.2l2 2 4.5-4.8" fill="none" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </span>
+  );
+}
+
+function BrandHeader({ creator, totalViews, count }: { creator: Engagement | null; totalViews: number; count: number }) {
+  if (!creator) return null;
+  return (
+    <div className="flex items-center flex-none" style={{ paddingLeft: PAD, paddingRight: PAD, marginTop: 18, gap: 14 }}>
+      <div className="flex-none overflow-hidden" style={{ width: 58, height: 58, borderRadius: 29, background: "#eee", border: "2px solid #ececec" }}>
+        {creator.author_avatar && (
+          <ImageWithFallback src={creator.author_avatar} alt="Celsius" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
+        )}
+      </div>
+      <div className="flex flex-col">
+        <span className="flex items-center" style={{ gap: 7 }}>
+          <span style={{ fontFamily: FONT, fontWeight: 600, fontSize: 24, color: "#000" }}>
+            {creator.author_nick ?? creator.author_name ?? "Celsius"}
+          </span>
+          {creator.author_verified && <VerifiedTick />}
+        </span>
+        <span style={{ fontFamily: FONT, fontWeight: 400, fontSize: 14, color: "rgba(0,0,0,0.45)" }}>
+          {creator.author_fans != null && <>{formatCompact(creator.author_fans)} followers · </>}
+          {count} live campaigns · {formatCompact(totalViews)} total views
+        </span>
+      </div>
+      <div className="flex-1" />
+      <div className="flex items-center gap-2 flex-none" style={{ border: "1.5px solid #66A737", borderRadius: 20, padding: "6px 14px" }}>
+        <span style={{ width: 8, height: 8, borderRadius: 4, background: "#66A737" }} />
+        <span style={{ fontFamily: FONT, fontWeight: 500, fontSize: 13, color: "#3d6b1f" }}>Live</span>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const { ads, stats } = useBrandData(BRAND_ID);
+  const { creator, totalViews, count } = useBrandCreator(BRAND_ID);
 
   const thriving = stats ? stats.health_breakdown.thriving : 0;
   const aging = stats ? stats.health_breakdown.aging : 0;
@@ -709,6 +780,9 @@ export default function App() {
     <div className="w-full min-h-screen bg-white flex flex-col">
       {/* ── 1. Nav header ─────────────────────────────────────────────── */}
       <TopNav />
+
+      {/* ── 1b. Celsius brand identity ────────────────────────────────── */}
+      <BrandHeader creator={creator} totalViews={totalViews} count={count} />
 
       {/* ── 2. Stats bar ──────────────────────────────────────────────── */}
       <div className="flex items-center flex-none" style={{ paddingLeft: PAD, paddingRight: PAD, marginTop: 16, gap: 20 }}>
