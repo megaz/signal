@@ -1,5 +1,5 @@
 import { api } from "./api";
-import type { Beat, FixProposal } from "@/types/beat";
+import type { Beat, FixProposal, PlanData } from "@/types/beat";
 
 export const canvasService = {
   getBeats: (adId: string) =>
@@ -16,4 +16,7 @@ export const canvasService = {
 
   askCopilot: (adId: string, question: string) =>
     api.post<{ answer: string }>(`/canvas/${adId}/copilot`, { question }),
+
+  getPlan: (adId: string) =>
+    api.post<PlanData>(`/canvas/${adId}/plan`),
 };

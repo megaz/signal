@@ -14,7 +14,7 @@ const NAV_ITEMS = [
   { label: "Dashboard",  href: "/" },
   { label: "Studio",     href: "/canvas" },
   { label: "Monitoring", href: "/monitoring" },
-  { label: "AI Copilot", href: "/radar" },
+  { label: "AI Copilot", href: "/prism" },
 ];
 
 function isActive(pathname: string, href: string): boolean {

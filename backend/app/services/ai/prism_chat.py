@@ -242,6 +242,11 @@ async def stream_prism_chat(
                 messages.append({"role": "user", "content": tool_results})
                 continue  # re-stream so the model can close out the turn
 
+            if final.stop_reason == "pause_turn":
+                # Long-running web search asked to continue; replay and keep going.
+                messages.append({"role": "assistant", "content": final.content})
+                continue
+
             yield _sse("done", {"stop_reason": final.stop_reason})
             return
 

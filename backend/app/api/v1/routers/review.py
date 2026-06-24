@@ -1,6 +1,7 @@
 import uuid
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -36,15 +37,22 @@ def _require_luma_key() -> None:
         raise HTTPException(503, "LUMA_API_KEY is not configured")
 
 
+class GenerateRequest(BaseModel):
+    extra_context: str | None = None  # nodeEdits + brandKit appended to luma_prompt
+
+
 @router.post("/{ad_id}/generate", response_model=RefreshOut)
 async def trigger_generation(
     ad_id: str,
     background_tasks: BackgroundTasks,
+    body: GenerateRequest | None = None,
     db: AsyncSession = Depends(get_db),
 ):
     """Build a performance brief and generate a refreshed cut via Luma."""
     _require_luma_key()
     brief = await build_creative_brief(ad_id, db)
+    if body and body.extra_context:
+        brief.luma_prompt = brief.luma_prompt.rstrip() + "\n\nAdditional context:\n" + body.extra_context
     refresh = Refresh(
         id=f"ref_{ad_id}_{uuid.uuid4().hex[:8]}",
         ad_id=ad_id,

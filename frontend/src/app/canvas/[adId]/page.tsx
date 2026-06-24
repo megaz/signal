@@ -119,7 +119,12 @@ export default function CanvasScreen({ params }: Props) {
       <div className="flex flex-col flex-1 min-h-0">
         {ad && <AdHeader ad={ad} />}
         <div className="relative flex flex-1 min-h-0 overflow-hidden">
-          <BeatCanvas adId={adId} onAnalysisComplete={() => adService.getAd(adId).then(setAd).catch(() => null)} />
+          <BeatCanvas
+            adId={adId}
+            adTitle={ad?.title ?? undefined}
+            adVideoUrl={ad?.video_url ?? undefined}
+            onAnalysisComplete={() => adService.getAd(adId).then(setAd).catch(() => null)}
+          />
           <CoPilot adId={adId} />
         </div>
       </div>

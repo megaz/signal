@@ -1,6 +1,20 @@
 export type BeatType = "hook" | "build" | "product" | "payoff" | "cta";
 export type BeatHealth = "strong" | "weak" | "critical";
 
+export interface RebuiltBeat {
+  beat_type: string;
+  order: number;
+  action: string;
+}
+
+export interface PlanData {
+  strategy: "variations" | "full_recreate";
+  rationale: string;
+  reasoning_steps: string[];
+  affected_beat_ids: string[];
+  rebuilt_beats: RebuiltBeat[];
+}
+
 export interface Beat {
   id: string;
   beat_type: BeatType;

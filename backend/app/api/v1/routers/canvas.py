@@ -5,8 +5,10 @@ from sqlalchemy import select
 from app.core.database import get_db
 from app.models.beat import Beat
 from app.schemas.beat import BeatOut, AcceptFixRequest
+from app.schemas.plan import PlanOut
 from app.services.ai.teardown import run_teardown
 from app.services.ai.fix_proposer import propose_fix
+from app.services.ai.plan_advisor import plan_ad
 
 router = APIRouter()
 
@@ -17,6 +19,16 @@ async def get_beats(ad_id: str, db: AsyncSession = Depends(get_db)):
         select(Beat).where(Beat.ad_id == ad_id).order_by(Beat.order)
     )
     return [BeatOut.model_validate(b) for b in result.scalars().all()]
+
+
+@router.post("/{ad_id}/plan", response_model=PlanOut)
+async def plan_canvas(ad_id: str, db: AsyncSession = Depends(get_db)):
+    """Run AI planning: decides Variations vs Full Recreate with visible reasoning."""
+    plan = await plan_ad(ad_id, db)
+    if not plan:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Ad not found")
+    return plan
 
 
 @router.post("/{ad_id}/teardown")

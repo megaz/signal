@@ -90,10 +90,10 @@ export function RisingTopTabs({ series, colors }: { series: TrendSeries[]; color
                 <Sparkline values={r.values} width={200} height={32} color={r.color} />
               </div>
               <Link
-                href="/radar"
+                href="/prism"
                 style={{ fontFamily: FONT, fontSize: 13, color: "#000", marginTop: 10, display: "inline-block", textDecoration: "underline" }}
               >
-                Explore in Radar →
+                Explore in Prism →
               </Link>
             </div>
           );

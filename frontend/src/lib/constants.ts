@@ -25,7 +25,7 @@ export const BEAT_LABELS: Record<string, string> = {
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 export const WS_BASE  = process.env.NEXT_PUBLIC_WS_URL  ?? "ws://localhost:8000";
 
-// ─── Light theme (new Figma-look pages: Manager / Canvas / Monitoring / Radar / Trends) ───
+// ─── Light theme (new Figma-look pages: Manager / Canvas / Monitoring / Prism / Trends) ───
 
 /** Single demo brand wired across the new pages. */
 export const DEFAULT_BRAND_ID = process.env.NEXT_PUBLIC_DEFAULT_BRAND_ID ?? "celsius";

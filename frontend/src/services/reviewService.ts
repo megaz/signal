@@ -2,8 +2,8 @@ import { api } from "./api";
 import type { Refresh } from "@/types/review";
 
 export const reviewService = {
-  triggerGeneration: (adId: string) =>
-    api.post<Refresh>(`/review/${adId}/generate`),
+  triggerGeneration: (adId: string, extraContext?: string) =>
+    api.post<Refresh>(`/review/${adId}/generate`, { extra_context: extraContext ?? null }),
 
   getRefresh: (adId: string) =>
     api.get<Refresh>(`/review/${adId}/refresh`),
