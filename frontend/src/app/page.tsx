@@ -1,17 +1,21 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { ImageWithFallback } from "@/app/components/figma/ImageWithFallback";
-import imgAvatar from "@/imports/MacBookPro142/85510eea03b550927f9e55a6dd3a47e8d4de59a5.png";
-import imgLogo from "@/imports/MacBookPro142/dead263f5cd0cad1ebb5b08c03b9078354a946ff.png";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import svgPaths from "@/imports/MacBookPro142/svg-hc5vql6mh7";
+import { TopNav } from "@/components/shell/TopNav";
+import { adService } from "@/services/adService";
+import type { AdHealth, AdNode, BrandStats } from "@/types/ad";
+
+// ─── Config ─────────────────────────────────────────────────────────────────────
+const BRAND_ID = process.env.NEXT_PUBLIC_DEMO_BRAND_ID ?? "celsius";
 
 // ─── Layout constants ──────────────────────────────────────────────────────────
 const PAD = 40;        // horizontal page padding
 const COL_GAP = 22;    // gap between gallery columns
-const ROW_GAP = 14;    // gap between ads in a column
-const TARGET_COL = 460; // desired column width → drives responsive column count
+const GAL_TILE = 210;  // target gallery tile width → responsive column count
 const FONT = "'Poppins', sans-serif";
+const TIKTOK_RATIO = 16 / 9; // height / width
 
 // ─── Shared types / palette ─────────────────────────────────────────────────────
 type Status = "thriving" | "aging" | "fatigued";
@@ -30,66 +34,13 @@ const STATUS_LABEL: Record<Status, string> = {
   fatigued: "Fatigued",
 };
 
-// ─── Campaign cards ───────────────────────────────────────────────────────────
-const CAMPAIGNS: { id: number; status: Status; trend: Trend }[] = [
-  { id: 1,  status: "thriving", trend: "up"   },
-  { id: 2,  status: "aging",    trend: "down"  },
-  { id: 3,  status: "thriving", trend: "up"   },
-  { id: 4,  status: "thriving", trend: "up"   },
-  { id: 5,  status: "aging",    trend: "up"   },
-  { id: 6,  status: "fatigued", trend: "down"  },
-  { id: 7,  status: "thriving", trend: "up"   },
-  { id: 8,  status: "aging",    trend: "down"  },
-  { id: 9,  status: "thriving", trend: "up"   },
-  { id: 10, status: "fatigued", trend: "down"  },
-  { id: 11, status: "aging",    trend: "up"   },
-  { id: 12, status: "thriving", trend: "up"   },
-  { id: 13, status: "fatigued", trend: "down"  },
-  { id: 14, status: "thriving", trend: "up"   },
-  { id: 15, status: "aging",    trend: "up"   },
-  { id: 16, status: "thriving", trend: "up"   },
-  { id: 17, status: "fatigued", trend: "down"  },
-  { id: 18, status: "aging",    trend: "down"  },
-  { id: 19, status: "thriving", trend: "up"   },
-  { id: 20, status: "aging",    trend: "up"   },
-];
-
-// ─── Top performer data (per toggle period) ─────────────────────────────────────
-const PERIOD_DATA: Record<
-  Period,
-  {
-    avg: number;
-    change: string;
-    trend: Trend;
-    top: {
-      name: string;
-      handle: string;
-      score: number;
-      status: Status;
-      trend: Trend;
-      roas: string;
-      spend: string;
-      impr: string;
-      ctr: string;
-    };
-  }
-> = {
-  day:   { avg: 86, change: "+5.1%",  trend: "up",   top: { name: "Summer Splash",  handle: "#sum-04", score: 94, status: "thriving", trend: "up",   roas: "4.8x", spend: "$2.4k", impr: "182k", ctr: "3.1%" } },
-  week:  { avg: 82, change: "+4.2%",  trend: "up",   top: { name: "Back to School", handle: "#b2s-12", score: 91, status: "thriving", trend: "up",   roas: "4.2x", spend: "$14k",  impr: "1.2M", ctr: "2.8%" } },
-  month: { avg: 78, change: "-1.8%",  trend: "down", top: { name: "Brand Awareness", handle: "#bra-07", score: 88, status: "thriving", trend: "up",  roas: "3.9x", spend: "$61k",  impr: "5.4M", ctr: "2.5%" } },
-  year:  { avg: 84, change: "+18.6%", trend: "up",   top: { name: "Holiday Push",   handle: "#hol-21", score: 96, status: "thriving", trend: "up",   roas: "5.4x", spend: "$820k", impr: "62M",  ctr: "3.4%" } },
-};
-
 const PERIODS: { key: Period; label: string }[] = [
   { key: "day",   label: "Day"   },
   { key: "week",  label: "Week"  },
   { key: "month", label: "Month" },
   { key: "year",  label: "Year"  },
 ];
-
-// ─── Ad gallery ───────────────────────────────────────────────────────────────
-// TikTok-format creatives (9:16). Each card carries health status for filtering.
-const TIKTOK_RATIO = 16 / 9; // height / width
+const PERIOD_DAYS: Record<Period, number> = { day: 1, week: 7, month: 31, year: 366 };
 
 type GalleryView = "grid" | "stack";
 type StatusFilter = "all" | Status;
@@ -106,73 +57,44 @@ const GALLERY_VIEWS: { key: GalleryView; label: string }[] = [
   { key: "stack", label: "Stack" },
 ];
 
-type GalleryItem = {
-  id: number;
-  status: Status;
-  trend: Trend;
-  name: string;
-  handle: string;
-  score: number;
-  rev: string;
-  roas: string;
-  impr: string;
-  dropoff: string;
-  ctr: string;
-};
+// ─── Mappers / helpers ───────────────────────────────────────────────────────────
 
-const GALLERY_NAMES = [
-  "Summer Splash",  "Back to School", "Holiday Push",  "Brand Awareness",
-  "Hydration Hits", "Energy Boost",   "Morning Reset", "Game Day",
-  "Festival Series", "Gym Streak",    "Office Fuel",   "Trail Mix",
-];
-
-const GALLERY_ITEMS: GalleryItem[] = Array.from({ length: 24 }, (_, i) => {
-  const status = (["thriving", "aging", "thriving", "fatigued", "aging", "thriving"] as Status[])[i % 6];
-  const trend: Trend = status === "fatigued" ? "down" : "up";
-  const r = (i * 37) % 100;
-  const score =
-    status === "thriving" ? 78 + (r % 20) : status === "aging" ? 55 + (r % 20) : 30 + (r % 22);
-  return {
-    id: i + 1,
-    status,
-    trend,
-    name: GALLERY_NAMES[i % GALLERY_NAMES.length],
-    handle: `#cmp-${String(i + 1).padStart(2, "0")}`,
-    score,
-    rev: `$${8 + (r % 90)}k`,
-    roas: `${(2 + (r % 35) / 10).toFixed(1)}x`,
-    impr: `${(0.3 + (r % 50) / 10).toFixed(1)}M`,
-    dropoff: `${12 + (r % 40)}%`,
-    ctr: `${(1.5 + (r % 30) / 10).toFixed(1)}%`,
-  };
-});
-
-// ─── Helpers ───────────────────────────────────────────────────────────────────
-
-function useElementWidth() {
-  const ref = useRef<HTMLDivElement>(null);
-  const [width, setWidth] = useState(0);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const update = () => setWidth(el.clientWidth);
-    update();
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-  return [ref, width] as const;
+function toStatus(health: AdHealth): Status {
+  if (health === "thriving") return "thriving";
+  if (health === "aging") return "aging";
+  return "fatigued";
+}
+function toTrend(health: AdHealth): Trend {
+  return health === "thriving" || health === "aging" ? "up" : "down";
 }
 
-const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+// Portfolio health = weighted average of the SAME buckets shown in the stats bar,
+// so the gauge reconciles with the counts (e.g. 8·100 + 7·60 + 15·20)/30 = 51.
+const HEALTH_WEIGHT: Record<Status, number> = { thriving: 100, aging: 60, fatigued: 20 };
+function portfolioHealth(ads: AdNode[]): number {
+  if (!ads.length) return 0;
+  const sum = ads.reduce((s, a) => s + HEALTH_WEIGHT[toStatus(a.health)], 0);
+  return Math.round(sum / ads.length);
+}
+const hasVideo = (a: AdNode) =>
+  !!a.thumbnail_url && (a.thumbnail_url.includes("tiktokcdn") || a.thumbnail_url.startsWith("/celsius/"));
+const adName = (a: AdNode) => a.title?.trim() || "Untitled creative";
+const adHandle = (a: AdNode) => `#${a.id.slice(0, 8)}`;
+// Composite performance score — encodes the thesis: sustained health + reach + longevity.
+// (health is the dominant, most reliable signal; reach and run-days reinforce it.)
+const REACH_WEIGHT: Record<string, number> = { high: 1, mid: 0.6, low: 0.3 };
+const reachWeight = (b: string | null) => (b ? REACH_WEIGHT[b] ?? 0.45 : 0.45);
+const runNorm = (days: number) => Math.max(0, Math.min(1, (days ?? 0) / 60));
+const perf = (a: AdNode) =>
+  0.6 * a.health_score + 0.25 * reachWeight(a.reach_bucket) + 0.15 * runNorm(a.run_days);
+const adScore = (a: AdNode) => Math.round(perf(a) * 100);
 
-function shadeFor(colIdx: number, numCols: number, rowIdx: number): string {
-  const t = numCols > 1 ? colIdx / (numCols - 1) : 0.5;
-  const base = Math.round(0x3a + (0xc8 - 0x3a) * t);
-  const jitter = [0, -8, 7, -4, 10, -10][rowIdx % 6];
-  const v = clamp(base + jitter, 0x20, 0xe0);
-  const h = v.toString(16).padStart(2, "0");
-  return `#${h}${h}${h}`;
+const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+const fmtInt = (n: number) => n.toLocaleString("en-US");
+function fmtDate(iso: string | null) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? "—" : d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 function scoreColor(v: number): string {
@@ -193,73 +115,193 @@ function describeArc(cx: number, cy: number, r: number, startDeg: number, endDeg
   return `M ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 0 ${end.x} ${end.y}`;
 }
 
-// ─── Nav sub-components ─────────────────────────────────────────────────────────
+function useElementWidth() {
+  const ref = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(0);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const update = () => setWidth(el.clientWidth);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return [ref, width] as const;
+}
 
-function NavLogo() {
+// Fetch a brand's ads + stats once
+function useBrandData(brandId: string) {
+  const [ads, setAds] = useState<AdNode[]>([]);
+  const [stats, setStats] = useState<BrandStats | null>(null);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const [web, st] = await Promise.all([
+          adService.getWebNodes(brandId),
+          adService.getStats(brandId),
+        ]);
+        if (!alive) return;
+        setStats(st);
+        // video-bearing creatives first, then by score
+        const sorted = [...web.nodes].sort(
+          (a, b) => Number(hasVideo(b)) - Number(hasVideo(a)) || perf(b) - perf(a)
+        );
+        setAds(sorted);
+      } catch {
+        /* leave empty — UI degrades gracefully */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [brandId]);
+  return { ads, stats };
+}
+
+// ─── Media: real cover + hover/auto video (lazy-loads video_url via /ads/{id}) ──
+function AdMedia({ ad, autoplay = false }: { ad: AdNode; autoplay?: boolean }) {
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [active, setActive] = useState(autoplay);
+  const startedRef = useRef(false);
+
+  const ensureVideo = useCallback(async () => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+    try {
+      const detail = await adService.getAd(ad.id);
+      setVideoUrl(detail.video_url);
+    } catch {
+      /* keep showing the cover image */
+    }
+  }, [ad.id]);
+
+  useEffect(() => {
+    if (autoplay) {
+      setActive(true);
+      void ensureVideo();
+    }
+  }, [autoplay, ensureVideo]);
+
   return (
     <div
-      className="relative flex-none rounded-full"
-      style={{
-        width: 46,
-        height: 46,
-        background: "linear-gradient(180deg, #bcbce5 36.923%, #8a8bc7 125.39%)",
+      className="absolute inset-0"
+      onMouseEnter={() => {
+        if (!autoplay) {
+          setActive(true);
+          void ensureVideo();
+        }
+      }}
+      onMouseLeave={() => {
+        if (!autoplay) setActive(false);
       }}
     >
-      <img
-        src={imgLogo.src}
-        alt="logo"
-        className="absolute pointer-events-none"
-        style={{ width: 25, height: 24, top: 11, left: 11, objectFit: "cover" }}
-      />
+      {ad.thumbnail_url && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={ad.thumbnail_url}
+          alt={ad.title ?? ""}
+          referrerPolicy="no-referrer"
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+      )}
+      {active && videoUrl && (
+        <video
+          src={videoUrl}
+          poster={ad.thumbnail_url ?? undefined}
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="metadata"
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+      )}
     </div>
   );
 }
 
-function NavPill({ label, active = false }: { label: string; active?: boolean }) {
+// Trend tab — its square outer corner is clipped to the card's radius by the
+// parent's overflow:hidden, so it always lines up with the rounded background.
+function TrendNotch({ color, trend, w = 44, h = 32 }: { color: string; trend: Trend; w?: number; h?: number }) {
   return (
     <div
-      className="flex items-center justify-center flex-none cursor-pointer"
-      style={{
-        width: 132,
-        height: 46,
-        borderRadius: 26,
-        border: `2px solid ${active ? "#000" : "rgba(138,138,138,0.8)"}`,
-      }}
+      className="absolute top-0 right-0 z-10 flex items-center justify-center"
+      style={{ width: w, height: h, background: color, borderBottomLeftRadius: 13, pointerEvents: "none" }}
     >
-      <span style={{ fontFamily: FONT, fontWeight: 400, fontSize: 17, color: "#000" }}>{label}</span>
-    </div>
-  );
-}
-
-function SearchBar() {
-  return (
-    <div
-      className="flex items-center gap-2 flex-1 min-w-0"
-      style={{ height: 46, borderRadius: 30, border: "2px solid #000", paddingLeft: 18, paddingRight: 16 }}
-    >
-      <svg style={{ width: 17, height: 17, flexShrink: 0 }} viewBox="0 0 21.7087 21.7055" fill="none">
-        <path d={svgPaths.p2ec3ce00} stroke="#000" strokeWidth="2" />
+      <svg viewBox="0 0 54 39" fill="none" style={{ width: "60%", height: "60%", display: "block" }}>
+        <path d={trend === "up" ? svgPaths.p817d080 : svgPaths.p7f52200} fill="white" />
       </svg>
-      <span style={{ fontFamily: FONT, fontWeight: 400, fontSize: 17, color: "#000" }}>Search</span>
     </div>
   );
 }
 
-function UserSection() {
+function InfoDot({ size = 18 }: { size?: number }) {
   return (
-    <div className="flex items-center gap-2 flex-none">
-      <div className="flex flex-col">
-        <span style={{ fontFamily: FONT, fontWeight: 400, fontSize: 17, color: "#000", lineHeight: 1.2 }}>
-          James Kuzan
-        </span>
-        <span style={{ fontFamily: FONT, fontWeight: 400, fontSize: 13, color: "rgba(0,0,0,0.3)", lineHeight: 1.2 }}>
-          @JamesK
-        </span>
-      </div>
-      <div className="flex-none overflow-hidden" style={{ width: 46, height: 46, borderRadius: 50 }}>
-        <ImageWithFallback src={imgAvatar} alt="James Kuzan" className="w-full h-full object-cover" />
-      </div>
+    <div
+      className="absolute z-10"
+      style={{ top: 11, left: 11, pointerEvents: "none", filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.55))" }}
+    >
+      <svg style={{ width: size, height: size, display: "block" }} viewBox="0 0 21 21" fill="none">
+        <circle cx="10.5" cy="10.5" r="9.5" stroke="white" strokeWidth="2" />
+        <path d={svgPaths.p3c4bedc0} fill="white" />
+      </svg>
     </div>
+  );
+}
+
+function StatusTag({ status }: { status: Status }) {
+  return (
+    <div
+      className="absolute z-10 flex items-center gap-1.5"
+      style={{ bottom: 10, left: 11, pointerEvents: "none", filter: "drop-shadow(0 1px 3px rgba(0,0,0,0.6))" }}
+    >
+      <span style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: STATUS_COLOR[status] }} />
+      <span style={{ fontFamily: FONT, fontWeight: 500, fontSize: 12, color: "rgba(255,255,255,0.92)" }}>
+        {STATUS_LABEL[status]}
+      </span>
+    </div>
+  );
+}
+
+const FATIGUE_RED = STATUS_COLOR.fatigued;
+const canvasHref = (adId: string) => `/canvas/${adId}`;
+
+// The money interaction: a fatigued creative is dying → drop straight into the
+// Canvas teardown to fix it. This is the loudest affordance on a fatigued card —
+// a red, always-visible "Refresh" button (not hover-gated) plus an alert ring.
+function FatigueOverlay({ adId, radius }: { adId: string; radius: number }) {
+  return (
+    <>
+      <div
+        className="absolute inset-0 z-10 pointer-events-none"
+        style={{ border: `2px solid ${FATIGUE_RED}`, borderRadius: radius }}
+      />
+      <Link
+        href={canvasHref(adId)}
+        aria-label="Diagnose and refresh this creative in Canvas"
+        className="absolute z-20 flex items-center justify-center gap-1.5 transition-transform hover:scale-[1.04]"
+        style={{
+          left: 8,
+          right: 8,
+          bottom: 8,
+          height: 40,
+          borderRadius: 12,
+          background: FATIGUE_RED,
+          color: "#fff",
+          textDecoration: "none",
+          fontFamily: FONT,
+          fontWeight: 700,
+          fontSize: 13,
+          letterSpacing: "0.01em",
+          boxShadow: "0 4px 16px rgba(201,57,26,0.55)",
+        }}
+      >
+        Refresh now
+        <span aria-hidden style={{ fontWeight: 600 }}>→</span>
+      </Link>
+    </>
   );
 }
 
@@ -279,9 +321,7 @@ function StatBadge({ value }: { value: string }) {
 function StatGroup({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center gap-2 flex-none">
-      <span style={{ fontFamily: FONT, fontWeight: 400, fontSize: 16, color: "rgba(0,0,0,0.55)", whiteSpace: "nowrap" }}>
-        {label}
-      </span>
+      <span style={{ fontFamily: FONT, fontWeight: 400, fontSize: 16, color: "rgba(0,0,0,0.55)", whiteSpace: "nowrap" }}>{label}</span>
       <StatBadge value={value} />
     </div>
   );
@@ -289,18 +329,8 @@ function StatGroup({ label, value }: { label: string; value: string }) {
 
 // ─── Top performers ─────────────────────────────────────────────────────────────
 
-// Trend badge SVG reused from the campaign card (top-right notch)
-function TrendNotch({ color, trend, w = 44, h = 32 }: { color: string; trend: Trend; w?: number; h?: number }) {
-  return (
-    <svg style={{ width: w, height: h, display: "block" }} viewBox="0 0 54 39" fill="none">
-      <path d={svgPaths.p3f477800} fill={color} />
-      <path d={trend === "up" ? svgPaths.p817d080 : svgPaths.p7f52200} fill="white" />
-    </svg>
-  );
-}
-
 // Radial performance gauge (270° rainbow arc)
-function Gauge({ value, change, trend }: { value: number; change: string; trend: Trend }) {
+function Gauge({ value, fatigued, total }: { value: number; fatigued: number; total: number }) {
   const size = 168;
   const cx = size / 2;
   const cy = size / 2;
@@ -310,7 +340,6 @@ function Gauge({ value, change, trend }: { value: number; change: string; trend:
   const END = 135;
   const valEnd = START + (END - START) * (clamp(value, 0, 100) / 100);
   const color = scoreColor(value);
-  const trendColor = trend === "up" ? STATUS_COLOR.thriving : STATUS_COLOR.fatigued;
 
   return (
     <div
@@ -318,191 +347,24 @@ function Gauge({ value, change, trend }: { value: number; change: string; trend:
       style={{ width: 190, minHeight: 188, border: "2px solid #ececec", borderRadius: 22, padding: "6px 0" }}
     >
       <svg width={size} height={size * 0.84} viewBox={`0 0 ${size} ${size * 0.84}`}>
-        {/* track */}
         <path d={describeArc(cx, cy, r, START, END)} stroke="#ececec" strokeWidth={sw} fill="none" strokeLinecap="round" />
-        {/* value */}
         {value > 0 && (
           <path d={describeArc(cx, cy, r, START, valEnd)} stroke={color} strokeWidth={sw} fill="none" strokeLinecap="round" />
         )}
         <text x={cx} y={cy - 2} textAnchor="middle" style={{ fontFamily: FONT, fontWeight: 600, fontSize: 38, fill: "#000" }}>
           {value}
         </text>
-        <text x={cx} y={cy + 20} textAnchor="middle" style={{ fontFamily: FONT, fontWeight: 400, fontSize: 12, fill: "rgba(0,0,0,0.45)" }}>
-          Performance
+        <text x={cx} y={cy + 20} textAnchor="middle" style={{ fontFamily: FONT, fontWeight: 500, fontSize: 12, fill: "rgba(0,0,0,0.55)" }}>
+          Portfolio health
         </text>
       </svg>
       <div className="flex items-center gap-1" style={{ marginTop: -6 }}>
-        <span style={{ color: trendColor, fontSize: 13 }}>{trend === "up" ? "▲" : "▼"}</span>
-        <span style={{ fontFamily: FONT, fontWeight: 500, fontSize: 13, color: trendColor }}>{change}</span>
-        <span style={{ fontFamily: FONT, fontWeight: 400, fontSize: 12, color: "rgba(0,0,0,0.4)" }}>vs prev.</span>
+        <span style={{ fontFamily: FONT, fontWeight: 600, fontSize: 13, color: STATUS_COLOR.fatigued }}>{fatigued}</span>
+        <span style={{ fontFamily: FONT, fontWeight: 400, fontSize: 12, color: "rgba(0,0,0,0.45)" }}>of {total} fatigued</span>
       </div>
     </div>
   );
 }
-
-function PeriodToggle({ period, setPeriod }: { period: Period; setPeriod: (p: Period) => void }) {
-  return (
-    <div className="flex items-center flex-none" style={{ border: "1.5px solid #000", borderRadius: 20, padding: 2, gap: 2 }}>
-      {PERIODS.map((p) => {
-        const active = p.key === period;
-        return (
-          <button
-            key={p.key}
-            onClick={() => setPeriod(p.key)}
-            style={{
-              borderRadius: 16,
-              padding: "4px 12px",
-              background: active ? "#000" : "transparent",
-              color: active ? "#fff" : "#000",
-              fontFamily: FONT,
-              fontWeight: 500,
-              fontSize: 13,
-              cursor: "pointer",
-              transition: "background 0.15s",
-            }}
-          >
-            {p.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex flex-col flex-1 items-start">
-      <span style={{ fontFamily: FONT, fontWeight: 600, fontSize: 18, color: "#000", lineHeight: 1.1 }}>{value}</span>
-      <span style={{ fontFamily: FONT, fontWeight: 400, fontSize: 12, color: "rgba(0,0,0,0.4)" }}>{label}</span>
-    </div>
-  );
-}
-
-function FeaturedPerformerCard({
-  period,
-  setPeriod,
-  data,
-}: {
-  period: Period;
-  setPeriod: (p: Period) => void;
-  data: (typeof PERIOD_DATA)[Period]["top"];
-}) {
-  const color = STATUS_COLOR[data.status];
-  return (
-    <div
-      className="flex-1 min-w-0 flex flex-col"
-      style={{ border: "2px solid #ececec", borderRadius: 22, padding: 18 }}
-    >
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <span style={{ fontFamily: FONT, fontWeight: 500, fontSize: 14, color: "rgba(0,0,0,0.5)" }}>
-          Top Performer
-        </span>
-        <PeriodToggle period={period} setPeriod={setPeriod} />
-      </div>
-
-      {/* Body */}
-      <div className="flex items-center gap-4" style={{ marginTop: 14 }}>
-        {/* Thumbnail */}
-        <div className="relative flex-none" style={{ width: 84, height: 92, backgroundColor: "#262626", borderRadius: 16 }}>
-          <div style={{ position: "absolute", top: 0, right: 0 }}>
-            <TrendNotch color={color} trend={data.trend} w={36} h={26} />
-          </div>
-          <div style={{ position: "absolute", bottom: 10, left: 10, width: 10, height: 10, borderRadius: 5, backgroundColor: color }} />
-        </div>
-
-        {/* Name + status */}
-        <div className="flex flex-col min-w-0">
-          <span style={{ fontFamily: FONT, fontWeight: 600, fontSize: 22, color: "#000", lineHeight: 1.15, whiteSpace: "nowrap" }}>
-            {data.name}
-          </span>
-          <span style={{ fontFamily: FONT, fontWeight: 400, fontSize: 13, color: "rgba(0,0,0,0.35)" }}>{data.handle}</span>
-          <div className="flex items-center gap-1.5" style={{ marginTop: 6 }}>
-            <span style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color }} />
-            <span style={{ fontFamily: FONT, fontWeight: 400, fontSize: 13, color }}>{STATUS_LABEL[data.status]}</span>
-          </div>
-        </div>
-
-        <div className="flex-1" />
-
-        {/* Score */}
-        <div className="flex flex-col items-end flex-none">
-          <span style={{ fontFamily: FONT, fontWeight: 600, fontSize: 40, color, lineHeight: 1 }}>{data.score}</span>
-          <span style={{ fontFamily: FONT, fontWeight: 400, fontSize: 12, color: "rgba(0,0,0,0.4)" }}>perf. score</span>
-        </div>
-      </div>
-
-      {/* Metrics */}
-      <div className="flex items-center" style={{ marginTop: 16, borderTop: "1px solid #efefef", paddingTop: 12, gap: 8 }}>
-        <Metric label="ROAS" value={data.roas} />
-        <Metric label="Spend" value={data.spend} />
-        <Metric label="Impressions" value={data.impr} />
-        <Metric label="CTR" value={data.ctr} />
-      </div>
-    </div>
-  );
-}
-
-// Compact campaign card for the carousel
-function CampaignCard({ status, trend }: { status: Status; trend: Trend }) {
-  const color = STATUS_COLOR[status];
-  return (
-    <div
-      className="relative flex-none"
-      style={{ width: 162, height: 240, backgroundColor: "#262626", borderRadius: 22, flexShrink: 0 }}
-    >
-      <div style={{ position: "absolute", top: 12, left: 12 }}>
-        <svg style={{ width: 18, height: 18, display: "block" }} viewBox="0 0 21 21" fill="none">
-          <circle cx="10.5" cy="10.5" r="9.5" stroke="white" strokeWidth="2" />
-          <path d={svgPaths.p3c4bedc0} fill="white" />
-        </svg>
-      </div>
-      <div style={{ position: "absolute", top: 0, right: 0 }}>
-        <TrendNotch color={color} trend={trend} w={45} h={32} />
-      </div>
-    </div>
-  );
-}
-
-function TopPerformers() {
-  const [period, setPeriod] = useState<Period>("week");
-  const d = PERIOD_DATA[period];
-
-  return (
-    <>
-      {/* Section title + gauge / featured card */}
-      <div className="flex-none" style={{ paddingLeft: PAD, paddingRight: PAD, marginTop: 22 }}>
-        <span style={{ fontFamily: FONT, fontWeight: 400, fontSize: 22, color: "#000" }}>Top Performers</span>
-        <div className="flex items-stretch" style={{ gap: 18, marginTop: 12 }}>
-          <Gauge value={d.avg} change={d.change} trend={d.trend} />
-          <FeaturedPerformerCard period={period} setPeriod={setPeriod} data={d.top} />
-        </div>
-      </div>
-
-      {/* Carousel */}
-      <div className="relative flex-none" style={{ marginTop: 16 }}>
-        <div
-          className="absolute inset-y-0 left-0 z-10 pointer-events-none"
-          style={{ width: 80, background: "linear-gradient(to right, white 0%, rgba(255,255,255,0) 100%)" }}
-        />
-        <div
-          className="flex"
-          style={{ gap: 16, paddingLeft: PAD, paddingRight: PAD, overflowX: "auto", scrollbarWidth: "none" }}
-        >
-          {CAMPAIGNS.map((c) => (
-            <CampaignCard key={c.id} status={c.status} trend={c.trend} />
-          ))}
-        </div>
-        <div
-          className="absolute inset-y-0 right-0 z-10 pointer-events-none"
-          style={{ width: 160, background: "linear-gradient(to right, rgba(255,255,255,0) 0%, white 100%)" }}
-        />
-      </div>
-    </>
-  );
-}
-
-// ─── Ad gallery ─────────────────────────────────────────────────────────────────
 
 function SegToggle<T extends string>({
   options,
@@ -541,130 +403,272 @@ function SegToggle<T extends string>({
   );
 }
 
-function TikTokCard({
-  item,
-  width,
-  shade,
-}: {
-  item: GalleryItem;
-  width: number;
-  shade: string;
-}) {
-  const color = STATUS_COLOR[item.status];
-  const height = Math.round(width * TIKTOK_RATIO);
+function PeriodToggle({ period, setPeriod }: { period: Period; setPeriod: (p: Period) => void }) {
+  return <SegToggle options={PERIODS} value={period} onChange={setPeriod} />;
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="relative flex-none" style={{ width, height, backgroundColor: shade, borderRadius: 18, flexShrink: 0 }}>
-      <div style={{ position: "absolute", top: 12, left: 12 }}>
-        <svg style={{ width: 18, height: 18, display: "block" }} viewBox="0 0 21 21" fill="none">
-          <circle cx="10.5" cy="10.5" r="9.5" stroke="white" strokeWidth="2" />
-          <path d={svgPaths.p3c4bedc0} fill="white" />
-        </svg>
+    <div className="flex flex-col flex-1 items-start min-w-0">
+      <span className="truncate w-full" style={{ fontFamily: FONT, fontWeight: 600, fontSize: 17, color: "#000", lineHeight: 1.1 }}>
+        {value}
+      </span>
+      <span style={{ fontFamily: FONT, fontWeight: 400, fontSize: 12, color: "rgba(0,0,0,0.4)" }}>{label}</span>
+    </div>
+  );
+}
+
+function FeaturedPerformerCard({
+  period,
+  setPeriod,
+  ad,
+}: {
+  period: Period;
+  setPeriod: (p: Period) => void;
+  ad: AdNode | null;
+}) {
+  const status = ad ? toStatus(ad.health) : "thriving";
+  const color = STATUS_COLOR[status];
+
+  return (
+    <div className="flex-1 min-w-0 flex" style={{ height: 200, border: "2px solid #ececec", borderRadius: 22, padding: 18, gap: 16 }}>
+      {/* Video — shown at a good size, full 9:16 */}
+      <div className="relative flex-none overflow-hidden" style={{ width: 92, height: 164, borderRadius: 14, background: "#1a1a1a" }}>
+        {ad && <AdMedia ad={ad} autoplay />}
+        {ad && <TrendNotch color={color} trend={toTrend(ad.health)} w={34} h={25} />}
       </div>
-      <div style={{ position: "absolute", top: 0, right: 0 }}>
-        <TrendNotch color={color} trend={item.trend} w={45} h={32} />
-      </div>
-      <div className="absolute flex items-center gap-1.5" style={{ bottom: 12, left: 12 }}>
-        <span style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color }} />
-        <span style={{ fontFamily: FONT, fontWeight: 400, fontSize: 12, color: "rgba(255,255,255,0.85)" }}>
-          {STATUS_LABEL[item.status]}
-        </span>
+
+      {/* Right column */}
+      <div className="flex-1 min-w-0 flex flex-col justify-between" style={{ height: 164 }}>
+        <div className="flex items-center justify-between">
+          <span style={{ fontFamily: FONT, fontWeight: 500, fontSize: 14, color: "rgba(0,0,0,0.5)" }}>Top Performer</span>
+          <PeriodToggle period={period} setPeriod={setPeriod} />
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="flex flex-col min-w-0">
+            <span className="truncate" style={{ fontFamily: FONT, fontWeight: 600, fontSize: 21, color: "#000", lineHeight: 1.15, maxWidth: 360 }} title={ad ? adName(ad) : ""}>
+              {ad ? adName(ad) : "No campaigns yet"}
+            </span>
+            <span style={{ fontFamily: FONT, fontWeight: 400, fontSize: 13, color: "rgba(0,0,0,0.35)" }}>{ad ? adHandle(ad) : "—"}</span>
+            <div className="flex items-center gap-1.5" style={{ marginTop: 6 }}>
+              <span style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color }} />
+              <span style={{ fontFamily: FONT, fontWeight: 400, fontSize: 13, color }}>{STATUS_LABEL[status]}</span>
+            </div>
+          </div>
+          <div className="flex-1" />
+          <div className="flex flex-col items-end flex-none">
+            <span style={{ fontFamily: FONT, fontWeight: 600, fontSize: 38, color, lineHeight: 1 }}>{ad ? adScore(ad) : 0}</span>
+            <span style={{ fontFamily: FONT, fontWeight: 400, fontSize: 12, color: "rgba(0,0,0,0.4)" }}>perf. score</span>
+          </div>
+        </div>
+
+        <div className="flex items-center" style={{ borderTop: "1px solid #efefef", paddingTop: 10, gap: 8 }}>
+          <Metric label="Run days" value={ad ? `${ad.run_days}d` : "—"} />
+          <Metric label="Reach" value={ad?.reach_bucket ?? "—"} />
+          <Metric label="Variants" value={ad ? String(ad.variant_count) : "—"} />
+          <Metric label="Platform" value={ad ? ad.platform : "—"} />
+        </div>
       </div>
     </div>
   );
 }
 
-function StackMetric({ label, value, accent }: { label: string; value: string; accent?: string }) {
+// Compact campaign card for the carousel
+function CampaignCard({ ad }: { ad: AdNode }) {
+  const status = toStatus(ad.health);
+  const fatigued = status === "fatigued";
+  return (
+    <div
+      className="relative flex-none overflow-hidden"
+      style={{ width: 162, height: 240, background: "#1a1a1a", borderRadius: 22, flexShrink: 0 }}
+    >
+      <AdMedia ad={ad} />
+      <InfoDot />
+      <TrendNotch color={STATUS_COLOR[status]} trend={toTrend(ad.health)} w={45} h={32} />
+      {fatigued ? <FatigueOverlay adId={ad.id} radius={22} /> : <StatusTag status={status} />}
+    </div>
+  );
+}
+
+function TopPerformers({ ads }: { ads: AdNode[] }) {
+  const [period, setPeriod] = useState<Period>("week");
+
+  const { gaugeValue, fatigued, total, featured } = useMemo(() => {
+    if (!ads.length) return { gaugeValue: 0, fatigued: 0, total: 0, featured: null as AdNode | null };
+    // Gauge = portfolio health over ALL ads, derived from the same buckets shown in
+    // the stats bar (stable; reconciles with the counts). The period toggle only
+    // picks the hero ad below.
+    // Period = "sustained at least this long" (proven), NOT "newer than" — a long-running
+    // winner must never be excluded from the hero. Falls back to all ads if none qualify.
+    const minRun = PERIOD_DAYS[period];
+    const sub = ads.filter((a) => (a.run_days ?? 0) >= minRun);
+    const pool = sub.length ? sub : ads;
+    const feat = [...pool].sort(
+      (a, b) => perf(b) - perf(a) || Number(hasVideo(b)) - Number(hasVideo(a))
+    )[0];
+    return {
+      gaugeValue: portfolioHealth(ads),
+      fatigued: ads.filter((a) => toStatus(a.health) === "fatigued").length,
+      total: ads.length,
+      featured: feat,
+    };
+  }, [ads, period]);
+
+  return (
+    <>
+      {/* Section title + gauge / featured card */}
+      <div className="flex-none" style={{ paddingLeft: PAD, paddingRight: PAD, marginTop: 22 }}>
+        <span style={{ fontFamily: FONT, fontWeight: 400, fontSize: 22, color: "#000" }}>Top Performers</span>
+        <div className="flex items-stretch" style={{ gap: 18, marginTop: 12 }}>
+          <Gauge value={gaugeValue} fatigued={fatigued} total={total} />
+          <FeaturedPerformerCard period={period} setPeriod={setPeriod} ad={featured} />
+        </div>
+      </div>
+
+      {/* Carousel */}
+      <div className="relative flex-none" style={{ marginTop: 16 }}>
+        <div className="absolute inset-y-0 left-0 z-20 pointer-events-none" style={{ width: 60, background: "linear-gradient(to right, white 0%, rgba(255,255,255,0) 100%)" }} />
+        <div className="flex" style={{ gap: 16, paddingLeft: PAD, paddingRight: PAD, overflowX: "auto", scrollbarWidth: "none" }}>
+          {ads.map((ad) => (
+            <CampaignCard key={ad.id} ad={ad} />
+          ))}
+        </div>
+        <div className="absolute inset-y-0 right-0 z-20 pointer-events-none" style={{ width: 140, background: "linear-gradient(to right, rgba(255,255,255,0) 0%, white 100%)" }} />
+      </div>
+    </>
+  );
+}
+
+// ─── Ad gallery ─────────────────────────────────────────────────────────────────
+
+function TikTokCard({ ad, width }: { ad: AdNode; width: number }) {
+  const status = toStatus(ad.health);
+  const fatigued = status === "fatigued";
+  const height = Math.round(width * TIKTOK_RATIO);
+  const style = { width, height, background: "#1a1a1a", borderRadius: 18, flexShrink: 0, display: "block", textDecoration: "none" } as const;
+  const inner = (
+    <>
+      <AdMedia ad={ad} />
+      <InfoDot />
+      <TrendNotch color={STATUS_COLOR[status]} trend={toTrend(ad.health)} w={45} h={32} />
+      {fatigued ? <FatigueOverlay adId={ad.id} radius={18} /> : <StatusTag status={status} />}
+    </>
+  );
+  // Fatigued → the loud Refresh CTA drives to Canvas; avoid nesting it inside an <a>.
+  if (fatigued) {
+    return (
+      <div className="relative flex-none overflow-hidden" style={style}>
+        {inner}
+      </div>
+    );
+  }
+  return (
+    <a href={`/ads/${ad.id}`} className="relative flex-none overflow-hidden" style={style}>
+      {inner}
+    </a>
+  );
+}
+
+function StackMetric({ label, value, accent, large }: { label: string; value: string; accent?: string; large?: boolean }) {
   return (
     <div className="flex flex-col">
-      <span style={{ fontFamily: FONT, fontWeight: 600, fontSize: 18, color: accent ?? "#000", lineHeight: 1.1 }}>
+      <span style={{ fontFamily: FONT, fontWeight: 600, fontSize: large ? 22 : 16, color: accent ?? "#000", lineHeight: 1.1 }}>
         {value}
       </span>
-      <span style={{ fontFamily: FONT, fontWeight: 400, fontSize: 11, color: "rgba(0,0,0,0.4)", whiteSpace: "nowrap" }}>
+      <span style={{ fontFamily: FONT, fontWeight: 400, fontSize: 11, color: "rgba(0,0,0,0.38)", whiteSpace: "nowrap", marginTop: 2 }}>
         {label}
       </span>
     </div>
   );
 }
 
-// Stack view row: a rectangular pill split into a creative column (video + info)
-// and a linked analytics column (revenue, ROAS, impressions, drop-off, signal).
-function StackRow({ item, shade }: { item: GalleryItem; shade: string }) {
-  const color = STATUS_COLOR[item.status];
-  const signal = item.status === "thriving" ? "Strong" : item.status === "aging" ? "Watch" : "At Risk";
-  const vidW = 104;
-  const vidH = Math.round(vidW * TIKTOK_RATIO);
+// Stack view row: square thumbnail | campaign info | divider | analytics
+function StackRow({ ad }: { ad: AdNode }) {
+  const status = toStatus(ad.health);
+  const color = STATUS_COLOR[status];
+  const trend = toTrend(ad.health);
+  const score = adScore(ad);
+  const fatigued = status === "fatigued";
+  const signal = status === "thriving" ? "Strong signal" : status === "aging" ? "Watch closely" : "At risk";
+  const thumbSz = 80; // square thumbnail
+
   return (
-    <div className="flex items-stretch w-full" style={{ border: "2px solid #ececec", borderRadius: 24, padding: 14, gap: 18 }}>
-      {/* Column 1 — video + campaign info */}
-      <div className="flex items-center flex-none" style={{ gap: 14 }}>
-        <div className="relative flex-none" style={{ width: vidW, height: vidH, backgroundColor: shade, borderRadius: 16 }}>
-          <div style={{ position: "absolute", top: 10, left: 10 }}>
-            <svg style={{ width: 16, height: 16, display: "block" }} viewBox="0 0 21 21" fill="none">
-              <circle cx="10.5" cy="10.5" r="9.5" stroke="white" strokeWidth="2" />
-              <path d={svgPaths.p3c4bedc0} fill="white" />
-            </svg>
-          </div>
-          <div style={{ position: "absolute", top: 0, right: 0 }}>
-            <TrendNotch color={color} trend={item.trend} w={38} h={27} />
-          </div>
-        </div>
-        <div className="flex flex-col" style={{ width: 150 }}>
-          <span style={{ fontFamily: FONT, fontWeight: 600, fontSize: 17, color: "#000", lineHeight: 1.2 }}>
-            {item.name}
-          </span>
-          <span style={{ fontFamily: FONT, fontWeight: 400, fontSize: 12, color: "rgba(0,0,0,0.35)" }}>
-            {item.handle}
-          </span>
-          <div className="flex items-center gap-1.5" style={{ marginTop: 8 }}>
-            <span style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color }} />
-            <span style={{ fontFamily: FONT, fontWeight: 400, fontSize: 13, color }}>{STATUS_LABEL[item.status]}</span>
-          </div>
-          <div className="flex items-baseline gap-1" style={{ marginTop: 10 }}>
-            <span style={{ fontFamily: FONT, fontWeight: 600, fontSize: 26, color, lineHeight: 1 }}>{item.score}</span>
-            <span style={{ fontFamily: FONT, fontWeight: 400, fontSize: 11, color: "rgba(0,0,0,0.4)" }}>perf.</span>
-          </div>
+    <a
+      href={fatigued ? canvasHref(ad.id) : `/ads/${ad.id}`}
+      aria-label={fatigued ? "Diagnose and refresh this creative in Canvas" : undefined}
+      className="flex items-center w-full overflow-hidden cursor-pointer"
+      style={{ border: fatigued ? `2px solid ${FATIGUE_RED}` : "1.5px solid #e8e8e8", borderRadius: 16, background: "#fff", textDecoration: "none", gap: 0 }}
+    >
+      {/* Square thumbnail */}
+      <div
+        className="relative flex-none overflow-hidden"
+        style={{ width: thumbSz, height: thumbSz, background: "#111", borderRadius: "14px 0 0 14px", flexShrink: 0 }}
+      >
+        <AdMedia ad={ad} />
+        <div className="absolute inset-0 flex items-end justify-start" style={{ padding: "6px 8px", background: "linear-gradient(to top, rgba(0,0,0,0.6) 0%, transparent 60%)" }}>
+          <span style={{ fontFamily: FONT, fontWeight: 700, fontSize: 17, color: "#fff", lineHeight: 1 }}>{score}</span>
         </div>
       </div>
 
-      {/* Divider linking the two columns */}
-      <div className="flex-none self-stretch" style={{ width: 1, background: "#efefef" }} />
+      {/* Campaign info */}
+      <div className="flex flex-col justify-center flex-none" style={{ padding: "0 18px", width: 200, gap: 4 }}>
+        <span className="truncate" style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14, color: "#000" }} title={adName(ad)}>
+          {adName(ad)}
+        </span>
+        <span style={{ fontFamily: FONT, fontWeight: 400, fontSize: 11, color: "rgba(0,0,0,0.35)" }}>{adHandle(ad)}</span>
+        <div className="flex items-center gap-1.5" style={{ marginTop: 3 }}>
+          <span style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: color, flexShrink: 0 }} />
+          <span style={{ fontFamily: FONT, fontWeight: 500, fontSize: 12, color }}>{STATUS_LABEL[status]}</span>
+        </div>
+      </div>
 
-      {/* Column 2 — analytics linked to the creative */}
-      <div className="flex-1 min-w-0 flex flex-col justify-center" style={{ gap: 14 }}>
-        <div className="flex items-center justify-between">
-          <span style={{ fontFamily: FONT, fontWeight: 500, fontSize: 12, color: "rgba(0,0,0,0.45)" }}>
-            Performance signals
-          </span>
+      {/* Divider */}
+      <div style={{ width: 1, alignSelf: "stretch", background: "#f0f0f0", flexShrink: 0 }} />
+
+      {/* Analytics */}
+      <div className="flex-1 min-w-0 flex items-center justify-between" style={{ padding: "0 24px", gap: 24 }}>
+        {/* KPIs */}
+        <div className="flex items-center" style={{ gap: 28 }}>
+          <StackMetric label="Score"    value={String(score)} accent={color} large />
+          <StackMetric label="Run days" value={`${ad.run_days ?? "—"}d`} large />
+          <StackMetric label="Reach"    value={ad.reach_bucket ?? "—"} large />
+          <StackMetric label="Variants" value={String(ad.variant_count)} large />
+        </div>
+
+        {fatigued ? (
+          /* The money interaction: dying creative → straight into the Canvas teardown */
+          <div
+            className="flex items-center gap-2 flex-none transition-transform hover:scale-[1.03]"
+            style={{ background: FATIGUE_RED, color: "#fff", borderRadius: 12, padding: "11px 20px", fontFamily: FONT, fontWeight: 700, fontSize: 14, boxShadow: "0 4px 16px rgba(201,57,26,0.45)" }}
+          >
+            Refresh now
+            <span aria-hidden style={{ fontWeight: 600 }}>→</span>
+          </div>
+        ) : (
+          /* Signal badge */
           <div
             className="flex items-center gap-1.5 flex-none"
-            style={{ border: `1.5px solid ${color}`, borderRadius: 20, padding: "3px 10px" }}
+            style={{ background: `${color}12`, border: `1.5px solid ${color}35`, borderRadius: 20, padding: "5px 14px" }}
           >
-            <span style={{ color, fontSize: 11 }}>{item.trend === "up" ? "▲" : "▼"}</span>
-            <span style={{ fontFamily: FONT, fontWeight: 500, fontSize: 12, color }}>{signal}</span>
+            <span style={{ fontSize: 10, color }}>{trend === "up" ? "▲" : "▼"}</span>
+            <span style={{ fontFamily: FONT, fontWeight: 600, fontSize: 12, color }}>{signal}</span>
           </div>
-        </div>
-        <div className="flex flex-wrap" style={{ gap: "14px 28px" }}>
-          <StackMetric label="Revenue" value={item.rev} />
-          <StackMetric label="ROAS" value={item.roas} accent={STATUS_COLOR.thriving} />
-          <StackMetric label="Impressions" value={item.impr} />
-          <StackMetric label="Drop-off" value={item.dropoff} accent={STATUS_COLOR.fatigued} />
-          <StackMetric label="CTR" value={item.ctr} />
-          <StackMetric label="Perf. score" value={String(item.score)} accent={color} />
-        </div>
+        )}
       </div>
-    </div>
+    </a>
   );
 }
 
-function Gallery() {
+function Gallery({ ads }: { ads: AdNode[] }) {
   const [ref, width] = useElementWidth();
   const [view, setView] = useState<GalleryView>("grid");
   const [filter, setFilter] = useState<StatusFilter>("all");
 
   const inner = Math.max(0, width - PAD * 2);
-  const numCols = inner ? Math.max(1, Math.round(inner / TARGET_COL)) : 3;
-  const colWidth = inner ? (inner - (numCols - 1) * COL_GAP) / numCols : TARGET_COL;
-  const items = GALLERY_ITEMS.filter((it) => filter === "all" || it.status === filter);
+  const numCols = inner ? Math.max(2, Math.round(inner / GAL_TILE)) : 5;
+  const colWidth = inner ? (inner - (numCols - 1) * COL_GAP) / numCols : GAL_TILE;
+  const items = ads.filter((a) => filter === "all" || toStatus(a.health) === filter);
 
   return (
     <div ref={ref} className="flex-none" style={{ paddingLeft: PAD, paddingRight: PAD, paddingBottom: PAD }}>
@@ -677,19 +681,14 @@ function Gallery() {
 
       {view === "grid" ? (
         <div className="flex flex-wrap" style={{ gap: COL_GAP }}>
-          {items.map((it, i) => (
-            <TikTokCard
-              key={it.id}
-              item={it}
-              width={colWidth}
-              shade={shadeFor(i % numCols, numCols, Math.floor(i / numCols))}
-            />
+          {items.map((ad) => (
+            <TikTokCard key={ad.id} ad={ad} width={colWidth} />
           ))}
         </div>
       ) : (
         <div className="flex flex-col" style={{ gap: 14 }}>
-          {items.map((it, i) => (
-            <StackRow key={it.id} item={it} shade={shadeFor(0, 1, i)} />
+          {items.map((ad) => (
+            <StackRow key={ad.id} ad={ad} />
           ))}
         </div>
       )}
@@ -700,38 +699,32 @@ function Gallery() {
 // ─── Root ─────────────────────────────────────────────────────────────────────
 
 export default function App() {
+  const { ads, stats } = useBrandData(BRAND_ID);
+
+  const thriving = stats ? stats.health_breakdown.thriving : 0;
+  const aging = stats ? stats.health_breakdown.aging : 0;
+  const fatigued = stats ? stats.fatiguing_count : 0;
+
   return (
     <div className="w-full min-h-screen bg-white flex flex-col">
       {/* ── 1. Nav header ─────────────────────────────────────────────── */}
-      <div className="flex items-center flex-none" style={{ paddingLeft: PAD, paddingRight: PAD, paddingTop: 28, gap: 14 }}>
-        <NavLogo />
-        <NavPill label="Manager" active />
-        <NavPill label="Canvas" />
-        <NavPill label="Monitoring" />
-        <div className="flex-1 min-w-0" style={{ marginLeft: 12, maxWidth: 340 }}>
-          <SearchBar />
-        </div>
-        <div className="flex-1" />
-        <UserSection />
-      </div>
+      <TopNav />
 
       {/* ── 2. Stats bar ──────────────────────────────────────────────── */}
       <div className="flex items-center flex-none" style={{ paddingLeft: PAD, paddingRight: PAD, marginTop: 16, gap: 20 }}>
-        <span style={{ fontFamily: FONT, fontWeight: 400, fontSize: 21, color: "#000", whiteSpace: "nowrap" }}>
-          Running Campaigns
-        </span>
+        <span style={{ fontFamily: FONT, fontWeight: 400, fontSize: 21, color: "#000", whiteSpace: "nowrap" }}>Running Campaigns</span>
         <div className="flex-1" />
-        <StatGroup label="Thriving" value="1,004" />
-        <StatGroup label="Aging"    value="920"   />
-        <StatGroup label="Fatigued" value="84"    />
+        <StatGroup label="Thriving" value={fmtInt(thriving)} />
+        <StatGroup label="Aging"    value={fmtInt(aging)} />
+        <StatGroup label="Fatigued" value={fmtInt(fatigued)} />
       </div>
 
       {/* ── 3. Top performers (gauge + featured card + carousel) ──────── */}
-      <TopPerformers />
+      <TopPerformers ads={ads} />
 
-      {/* ── 4. Ad gallery — fills remaining height, responsive masonry ── */}
+      {/* ── 4. Ad gallery — real creatives, filter + grid/stack view ──── */}
       <div style={{ height: 24 }} className="flex-none" />
-      <Gallery />
+      <Gallery ads={ads} />
     </div>
   );
 }

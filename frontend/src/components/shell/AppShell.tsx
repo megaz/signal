@@ -9,7 +9,7 @@ const POPPINS = "'Poppins', sans-serif";
  */
 export function AppShell({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen flex flex-col bg-white" style={{ fontFamily: POPPINS, color: "#000" }}>
+    <div className="h-screen overflow-hidden flex flex-col bg-white" style={{ fontFamily: POPPINS, color: "#000" }}>
       <TopNav />
       <main className="flex-1 min-h-0 flex flex-col">{children}</main>
     </div>

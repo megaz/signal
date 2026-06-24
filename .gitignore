@@ -17,6 +17,9 @@ venv/
 *.db-shm
 *.db-wal
 
+# Downloaded TikTok creatives (regenerate via scripts/download_celsius_media.py)
+frontend/public/celsius/
+
 # Node
 node_modules/
 .next/

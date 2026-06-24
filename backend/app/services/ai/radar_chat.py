@@ -1,3 +1,4 @@
+import asyncio
 import json
 from typing import Any
 
@@ -122,11 +123,14 @@ async def run_radar_chat(request: RadarChatRequest) -> tuple[str, RadarResponse]
         return "fallback", _build_fallback_response(request)
 
     try:
-        message = await client.messages.create(
-            model=settings.anthropic_model,
-            max_tokens=1600,
-            system=_SYSTEM,
-            messages=[{"role": "user", "content": _build_user_prompt(request)}],
+        message = await asyncio.wait_for(
+            client.messages.create(
+                model=settings.anthropic_model,
+                max_tokens=1600,
+                system=_SYSTEM,
+                messages=[{"role": "user", "content": _build_user_prompt(request)}],
+            ),
+            timeout=30,  # bound the live call so a network stall can't hang the request
         )
         raw_text = _extract_text(message)
         parsed = json.loads(_strip_code_fences(raw_text))
