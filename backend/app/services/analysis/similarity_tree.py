@@ -129,21 +129,37 @@ def assign_families(labels: list[int]) -> tuple[list[str], dict[str, int]]:
     return family_ids, counts
 
 
-async def cluster_brand_families(brand_id: str, eps: float = 0.25) -> None:
+def _embedding_text(ad: Ad) -> str:
+    return ad.title or ""
+
+
+def _thumbnail_url(ad: Ad) -> str | None:
+    return ad.thumbnail_url
+
+
+async def cluster_brand_families(
+    brand_id: str,
+    eps: float = 0.25,
+    *,
+    video_ids: list[str] | None = None,
+) -> None:
     if _get_text_model() is None:
         logger.warning("Skipping clustering for %s: ML models unavailable", brand_id)
         return
 
     async with AsyncSessionLocal() as db:
-        result = await db.execute(select(Ad).where(Ad.brand_id == brand_id))
-        ads = result.scalars().all()
+        query = select(Ad).where(Ad.brand_id == brand_id)
+        if video_ids is not None:
+            query = query.where(Ad.external_id.in_(video_ids))
+        ads = (await db.execute(query)).scalars().all()
         if not ads:
             return
 
         embeddings: list[np.ndarray] = []
         for ad in ads:
-            text_vec = embed_text(ad.title or "")
-            visual_vec = await embed_thumbnail(ad.thumbnail_url) if ad.thumbnail_url else None
+            text_vec = embed_text(_embedding_text(ad))
+            thumb = _thumbnail_url(ad)
+            visual_vec = await embed_thumbnail(thumb) if thumb else None
             embeddings.append(combine(text_vec, visual_vec))
 
         labels = compute_clusters(embeddings, eps)

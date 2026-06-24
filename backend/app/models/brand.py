@@ -14,3 +14,4 @@ class Brand(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     ads: Mapped[list["Ad"]] = relationship("Ad", back_populates="brand")
+    tiktok_posts: Mapped[list["TikTokPost"]] = relationship("TikTokPost", back_populates="brand")

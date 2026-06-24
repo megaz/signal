@@ -5,8 +5,10 @@ from sqlalchemy import select
 from app.core.database import get_db
 from app.models.brand import Brand
 from app.models.ad import Ad, AdHealth
+from app.models.tiktok_post import TikTokPost
 from app.schemas.ad import AdNode
 from app.services.analysis.similarity_tree import cluster_brand_families
+from app.services.ingestion.finalize import finalize_brand_ingestion
 
 router = APIRouter()
 
@@ -47,8 +49,44 @@ async def get_brand_stats(brand_id: str, db: AsyncSession = Depends(get_db)):
     }
 
 
+@router.post("/{brand_id}/finalize")
+async def trigger_finalize(
+    brand_id: str,
+    background_tasks: BackgroundTasks,
+    scope: str = Query("profile_posts", pattern="^(profile_posts|all)$"),
+):
+    """Re-run promote → score → cluster without re-scraping TikTok."""
+    background_tasks.add_task(finalize_brand_ingestion, brand_id, scope=scope)
+    return {"queued": True}
+
+
 @router.post("/{brand_id}/cluster")
 async def trigger_clustering(brand_id: str, background_tasks: BackgroundTasks):
     """Re-cluster all ads for a brand into creative families."""
     background_tasks.add_task(cluster_brand_families, brand_id)
     return {"queued": True}
+
+
+@router.get("/{brand_id}/tiktok-posts")
+async def get_brand_tiktok_posts(brand_id: str, db: AsyncSession = Depends(get_db)):
+    """TikTok posts ingested via clockworks/tiktok-scraper (with comments JSON)."""
+    result = await db.execute(select(TikTokPost).where(TikTokPost.brand_id == brand_id))
+    posts = result.scalars().all()
+    return {
+        "posts": [
+            {
+                "id": p.id,
+                "video_id": p.video_id,
+                "web_video_url": p.web_video_url,
+                "caption": p.caption,
+                "author_username": p.author_username,
+                "play_count": p.play_count,
+                "digg_count": p.digg_count,
+                "comment_count": p.comment_count,
+                "share_count": p.share_count,
+                "has_comments": bool(p.comments_json),
+                "fetched_at": p.fetched_at.isoformat() if p.fetched_at else None,
+            }
+            for p in posts
+        ]
+    }
