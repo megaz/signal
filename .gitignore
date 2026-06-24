@@ -1,3 +1,7 @@
+# Script output
+scripts/output/
+scripts/.venv/
+
 # Python
 __pycache__/
 *.py[cod]

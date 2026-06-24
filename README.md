@@ -18,3 +18,11 @@ Or all at once with Docker:
 
 
 docker-compose up
+
+TikTok ad scraper (Apify):
+
+
+./scripts/run_scrape_tiktok_ads.sh --query "celsius drinks"
+# Set APIFY_TOKEN in backend/.env first.
+# Results are filtered to ads mentioning the brand term (e.g. "celsius").
+# For EU brands, try: --mode ad_library --country GB

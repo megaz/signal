@@ -50,3 +50,7 @@ async def sync_tiktok_ads(brand_id: str, industry_id: str):
             ad.reach_bucket = raw.get("impression_bucket")
 
         await db.commit()
+
+    from app.services.analysis.similarity_tree import cluster_brand_families
+
+    await cluster_brand_families(brand_id)
